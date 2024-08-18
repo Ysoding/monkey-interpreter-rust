@@ -22,35 +22,34 @@ impl Lexer {
     pub fn next_token(&mut self) -> token::Token {
         self.skip_white_space();
 
-        let mut tok: token::Token;
-        match self.ch {
-            Some('+') => tok = self.new_token(token::TokenType::Plus, '+'),
-            Some('-') => tok = self.new_token(token::TokenType::Minus, '-'),
-            Some('/') => tok = self.new_token(token::TokenType::Slash, '/'),
-            Some('*') => tok = self.new_token(token::TokenType::Asterisk, '*'),
-            Some('<') => tok = self.new_token(token::TokenType::Lt, '<'),
-            Some('>') => tok = self.new_token(token::TokenType::Gt, '>'),
-            Some(',') => tok = self.new_token(token::TokenType::Comma, ','),
-            Some(';') => tok = self.new_token(token::TokenType::Semicolon, ';'),
-            Some('(') => tok = self.new_token(token::TokenType::LParen, '('),
-            Some(')') => tok = self.new_token(token::TokenType::RParen, ')'),
-            Some('{') => tok = self.new_token(token::TokenType::LBrace, '{'),
-            Some('}') => tok = self.new_token(token::TokenType::RBrace, '}'),
+        let tok = match self.ch {
+            Some('+') => self.new_token(token::TokenType::Plus, '+'),
+            Some('-') => self.new_token(token::TokenType::Minus, '-'),
+            Some('/') => self.new_token(token::TokenType::Slash, '/'),
+            Some('*') => self.new_token(token::TokenType::Asterisk, '*'),
+            Some('<') => self.new_token(token::TokenType::Lt, '<'),
+            Some('>') => self.new_token(token::TokenType::Gt, '>'),
+            Some(',') => self.new_token(token::TokenType::Comma, ','),
+            Some(';') => self.new_token(token::TokenType::Semicolon, ';'),
+            Some('(') => self.new_token(token::TokenType::LParen, '('),
+            Some(')') => self.new_token(token::TokenType::RParen, ')'),
+            Some('{') => self.new_token(token::TokenType::LBrace, '{'),
+            Some('}') => self.new_token(token::TokenType::RBrace, '}'),
             Some('=') => {
-                tok = if let Some('=') = self.peek_char() {
+                if let Some('=') = self.peek_char() {
                     self.read_char();
                     token::Token::new(token::TokenType::Eq, "==".to_string())
                 } else {
                     self.new_token(token::TokenType::Assign, '=')
-                };
+                }
             }
             Some('!') => {
-                tok = if let Some('=') = self.peek_char() {
+                if let Some('=') = self.peek_char() {
                     self.read_char();
                     token::Token::new(token::TokenType::Neq, "!=".to_string())
                 } else {
                     self.new_token(token::TokenType::Bang, '!')
-                };
+                }
             }
             Some(ch) => {
                 if self.is_letter(ch) {
@@ -67,15 +66,14 @@ impl Lexer {
                     };
                 }
 
-                tok = self.new_token(token::TokenType::Illegal, ch);
+                self.new_token(token::TokenType::Illegal, ch)
             }
-            None => {
-                tok = token::Token {
-                    typ: token::TokenType::Eof,
-                    literal: String::new(),
-                };
-            }
+            None => token::Token {
+                typ: token::TokenType::Eof,
+                literal: String::new(),
+            },
         };
+
         self.read_char();
         tok
     }
@@ -177,44 +175,44 @@ mod tests {
 
         let tests = vec![
             (TokenType::Let, "let"),
-            (TokenType::Ident, "five"),
+            (TokenType::Identifier, "five"),
             (TokenType::Assign, "="),
             (TokenType::Int, "5"),
             (TokenType::Semicolon, ";"),
             //
             (TokenType::Let, "let"),
-            (TokenType::Ident, "ten"),
+            (TokenType::Identifier, "ten"),
             (TokenType::Assign, "="),
             (TokenType::Int, "10"),
             (TokenType::Semicolon, ";"),
             //
             (TokenType::Let, "let"),
-            (TokenType::Ident, "add"),
+            (TokenType::Identifier, "add"),
             (TokenType::Assign, "="),
             (TokenType::Function, "fn"),
             (TokenType::LParen, "("),
-            (TokenType::Ident, "x"),
+            (TokenType::Identifier, "x"),
             (TokenType::Comma, ","),
-            (TokenType::Ident, "y"),
+            (TokenType::Identifier, "y"),
             (TokenType::RParen, ")"),
             (TokenType::LBrace, "{"),
             //
-            (TokenType::Ident, "x"),
+            (TokenType::Identifier, "x"),
             (TokenType::Plus, "+"),
-            (TokenType::Ident, "y"),
+            (TokenType::Identifier, "y"),
             (TokenType::Semicolon, ";"),
             //
             (TokenType::RBrace, "}"),
             (TokenType::Semicolon, ";"),
             //
             (TokenType::Let, "let"),
-            (TokenType::Ident, "result"),
+            (TokenType::Identifier, "result"),
             (TokenType::Assign, "="),
-            (TokenType::Ident, "add"),
+            (TokenType::Identifier, "add"),
             (TokenType::LParen, "("),
-            (TokenType::Ident, "five"),
+            (TokenType::Identifier, "five"),
             (TokenType::Comma, ","),
-            (TokenType::Ident, "ten"),
+            (TokenType::Identifier, "ten"),
             (TokenType::RParen, ")"),
             (TokenType::Semicolon, ";"),
             (TokenType::Bang, "!"),

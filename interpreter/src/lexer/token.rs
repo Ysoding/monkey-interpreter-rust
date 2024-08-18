@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 pub enum TokenType {
     Illegal,
     Eof,
-    Ident,
+    Identifier,
     Int,
     Assign,
     Plus,
@@ -42,6 +42,13 @@ impl Token {
     pub fn new(typ: TokenType, literal: String) -> Self {
         Self { typ, literal }
     }
+
+    pub(crate) fn default() -> Self {
+        Self {
+            typ: TokenType::Illegal,
+            literal: "".to_string(),
+        }
+    }
 }
 
 lazy_static! {
@@ -59,5 +66,8 @@ lazy_static! {
 }
 
 pub fn lookup_ident(ident: &str) -> TokenType {
-    KEYWORDS.get(ident).cloned().unwrap_or(TokenType::Ident)
+    KEYWORDS
+        .get(ident)
+        .cloned()
+        .unwrap_or(TokenType::Identifier)
 }
