@@ -14,8 +14,9 @@ pub trait Statement: Node + Any {
     fn st_name(&self) -> &str;
 }
 
-pub trait Expression: Node {
+pub trait Expression: Node + Any {
     fn expression_node(&self);
+    fn as_any(&self) -> &dyn Any;
 }
 
 pub struct Program {
@@ -91,6 +92,10 @@ pub struct Identifier {
 
 impl Expression for Identifier {
     fn expression_node(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl Node for Identifier {
