@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        Expression, ExpressionStatement, Identifier, IntegerLiteral, LetStatement, PrefixExpresion,
-        Program, ReturnStatement, Statement,
+        Expression, ExpressionStatement, Identifier, InfixExpresion, IntegerLiteral, LetStatement,
+        PrefixExpresion, Program, ReturnStatement, Statement,
     },
     lexer::{
         token::{Token, TokenType},
@@ -45,12 +45,41 @@ impl<'a> Parser<'a> {
             infix_parse_fns: HashMap::new(),
         };
         p.register_prefix(TokenType::Identifier, Parser::parse_identifier);
+
         p.register_prefix(TokenType::Int, Parser::parse_integer_literal);
+
         p.register_prefix(TokenType::Bang, Parser::parse_prefix_expression);
         p.register_prefix(TokenType::Minus, Parser::parse_prefix_expression);
+
+        p.register_infix(TokenType::Plus, Parser::parse_infix_expression);
+        p.register_infix(TokenType::Minus, Parser::parse_infix_expression);
+        p.register_infix(TokenType::Slash, Parser::parse_infix_expression);
+        p.register_infix(TokenType::Asterisk, Parser::parse_infix_expression);
+        p.register_infix(TokenType::Eq, Parser::parse_infix_expression);
+        p.register_infix(TokenType::Neq, Parser::parse_infix_expression);
+        p.register_infix(TokenType::Lt, Parser::parse_infix_expression);
+        p.register_infix(TokenType::Gt, Parser::parse_infix_expression);
+
         p.next_token();
         p.next_token();
         p
+    }
+
+    fn parse_infix_expression(p: &mut Parser, left: Expression) -> Expression {
+        let mut ret = InfixExpresion {
+            token: p.cur_token.clone(),
+            left: Some(Box::new(left)),
+            operator: p.cur_token.literal.clone(),
+            right: None,
+        };
+
+        let precedence = p.cur_precedence();
+        p.next_token();
+        if let Some(right_expr) = p.parse_expression(precedence) {
+            ret.right = Some(Box::new(right_expr));
+        }
+
+        Expression::Infix(ret)
     }
 
     fn parse_prefix_expression(p: &mut Parser) -> Expression {
@@ -106,6 +135,28 @@ impl<'a> Parser<'a> {
         program
     }
 
+    fn cur_precedence(&mut self) -> Precedence {
+        self.get_precedence(&self.cur_token.typ)
+    }
+
+    fn peek_precedence(&mut self) -> Precedence {
+        self.get_precedence(&self.peek_token.typ)
+    }
+
+    fn get_precedence(&self, typ: &TokenType) -> Precedence {
+        match typ {
+            TokenType::Eq => Precedence::Equals,
+            TokenType::Neq => Precedence::Equals,
+            TokenType::Lt => Precedence::LessGreater,
+            TokenType::Gt => Precedence::LessGreater,
+            TokenType::Plus => Precedence::Sum,
+            TokenType::Minus => Precedence::Sum,
+            TokenType::Asterisk => Precedence::Product,
+            TokenType::Slash => Precedence::Product,
+            _ => Precedence::Lowest,
+        }
+    }
+
     fn parse_statement(&mut self) -> Option<Statement> {
         match self.cur_token.typ {
             TokenType::Let => Some(Statement::Let(self.parse_let_statement()?)),
@@ -141,8 +192,19 @@ impl<'a> Parser<'a> {
                 return None;
             }
         };
+        let mut left_exp = prefix(self);
 
-        let left_exp = prefix(self);
+        while !self.peek_token_is(&TokenType::Semicolon) && precedence < self.peek_precedence() {
+            let typ = self.peek_token.typ.clone();
+
+            let infix = match self.infix_parse_fns.get(&typ) {
+                Some(infix_fn) => *infix_fn, // Dereference to copy the function pointer
+                None => return Some(left_exp),
+            };
+
+            self.next_token();
+            left_exp = infix(self, left_exp);
+        }
 
         Some(left_exp)
     }
@@ -232,6 +294,173 @@ mod tests {
     use crate::ast::Node;
 
     use super::*;
+    #[test]
+    fn test_operator_precedence_parsing() {
+        struct TestCase {
+            input: &'static str,
+            expected: &'static str,
+        }
+        let tests = [
+            TestCase {
+                input: "-a * b",
+                expected: "((-a) * b)",
+            },
+            TestCase {
+                input: "!-a",
+                expected: "(!(-a))",
+            },
+            TestCase {
+                input: "a + b + c",
+                expected: "((a + b) + c)",
+            },
+            TestCase {
+                input: "a + b - c",
+                expected: "((a + b) - c)",
+            },
+            TestCase {
+                input: "a * b * c",
+                expected: "((a * b) * c)",
+            },
+            TestCase {
+                input: "a * b / c",
+                expected: "((a * b) / c)",
+            },
+            TestCase {
+                input: "a + b / c",
+                expected: "(a + (b / c))",
+            },
+            TestCase {
+                input: "a + b * c + d / e - f",
+                expected: "(((a + (b * c)) + (d / e)) - f)",
+            },
+            TestCase {
+                input: "3 + 4; -5 * 5",
+                expected: "(3 + 4)((-5) * 5)",
+            },
+            TestCase {
+                input: "5 > 4 == 3 < 4",
+                expected: "((5 > 4) == (3 < 4))",
+            },
+            TestCase {
+                input: "5 < 4 != 3 > 4",
+                expected: "((5 < 4) != (3 > 4))",
+            },
+            TestCase {
+                input: "3 + 4 * 5 == 3 * 1 + 4 * 5",
+                expected: "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+            },
+        ];
+
+        for test_case in tests {
+            let mut l = Lexer::new(test_case.input.to_string());
+            let mut p = Parser::new(&mut l);
+            let program = p.parse_program();
+            check_parser_errors(&p);
+
+            assert_eq!(program.as_string(), test_case.expected);
+        }
+    }
+
+    #[test]
+    fn test_infix_expressios() {
+        struct TestCase {
+            input: &'static str,
+            left_val: i64,
+            operator: &'static str,
+            right_val: i64,
+        }
+        let infix_tests = [
+            TestCase {
+                input: "5 + 5;",
+                left_val: 5,
+                operator: "+",
+                right_val: 5,
+            },
+            TestCase {
+                input: "5 - 5;",
+                left_val: 5,
+                operator: "-",
+                right_val: 5,
+            },
+            TestCase {
+                input: "5 * 5;",
+                left_val: 5,
+                operator: "*",
+                right_val: 5,
+            },
+            TestCase {
+                input: "5 / 5;",
+                left_val: 5,
+                operator: "/",
+                right_val: 5,
+            },
+            TestCase {
+                input: "5 > 5;",
+                left_val: 5,
+                operator: ">",
+                right_val: 5,
+            },
+            TestCase {
+                input: "5 < 5;",
+                left_val: 5,
+                operator: "<",
+                right_val: 5,
+            },
+            TestCase {
+                input: "5 == 5;",
+                left_val: 5,
+                operator: "==",
+                right_val: 5,
+            },
+            TestCase {
+                input: "5 != 5;",
+                left_val: 5,
+                operator: "!=",
+                right_val: 5,
+            },
+        ];
+
+        for test_case in infix_tests {
+            let mut l = Lexer::new(test_case.input.to_string());
+            let mut p = Parser::new(&mut l);
+            let program = p.parse_program();
+            check_parser_errors(&p);
+
+            assert_eq!(
+                program.statements.len(),
+                1,
+                "program has not enough statements."
+            );
+
+            let stmt = &program.statements[0];
+            if let Statement::Expression(stmt) = stmt {
+                let expr = stmt
+                    .expression
+                    .as_ref()
+                    .expect("Expression should not be None");
+                if let Expression::Infix(expr) = expr {
+                    if !test_integer_literal(expr.left.as_ref().unwrap(), test_case.left_val) {
+                        return;
+                    }
+                    assert_eq!(
+                        expr.operator, test_case.operator,
+                        "exp.operator is not '{}' got={}",
+                        test_case.operator, expr.operator
+                    );
+                    if !test_integer_literal(expr.right.as_ref().unwrap(), test_case.right_val) {
+                        return;
+                    }
+                } else {
+                    panic!("stmt is not ast.PrefixExpresion. got={}", expr.name());
+                }
+            } else {
+                panic!(
+                    "program.statements[0] is not ast.ExpressionStatement. got={}",
+                    stmt.name()
+                );
+            }
+        }
+    }
 
     #[test]
     fn test_prefix_expressions() {
@@ -240,7 +469,6 @@ mod tests {
             operator: &'static str,
             interger_val: i64,
         }
-
         let prefix_tests = [
             TestCase {
                 input: "!5;",

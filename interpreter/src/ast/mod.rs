@@ -45,6 +45,7 @@ pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
     Prefix(PrefixExpresion),
+    Infix(InfixExpresion),
 }
 
 impl Expression {
@@ -53,6 +54,7 @@ impl Expression {
             Expression::Identifier(_) => "IdentifierExpression",
             Expression::IntegerLiteral(_) => "IntegerLiteralExpression",
             Expression::Prefix(_) => "PrefixExpresion",
+            Expression::Infix(_) => "InfixExpresion",
         }
     }
 }
@@ -62,7 +64,8 @@ impl Node for Expression {
         match self {
             Expression::Identifier(expr) => expr.token_literal(),
             Expression::IntegerLiteral(expr) => expr.token_literal(),
-            Expression::Prefix(expr) => todo!(),
+            Expression::Prefix(expr) => expr.token_literal(),
+            Expression::Infix(expr) => expr.token_literal(),
         }
     }
 
@@ -70,7 +73,8 @@ impl Node for Expression {
         match self {
             Expression::Identifier(expr) => expr.as_string(),
             Expression::IntegerLiteral(expr) => expr.as_string(),
-            Expression::Prefix(_) => todo!(),
+            Expression::Prefix(expr) => expr.as_string(),
+            Expression::Infix(expr) => expr.as_string(),
         }
     }
 }
@@ -217,9 +221,40 @@ impl Node for PrefixExpresion {
         let mut out = String::new();
 
         if let Some(right_expr) = self.right.as_ref() {
-            write!(&mut out, "({} {})", self.operator, right_expr.as_string()).unwrap();
+            write!(&mut out, "({}{})", self.operator, right_expr.as_string()).unwrap();
         } else {
-            write!(&mut out, "({} <none>)", self.operator).unwrap();
+            write!(&mut out, "({} <ERROR>)", self.operator).unwrap();
+        }
+
+        out
+    }
+}
+
+pub struct InfixExpresion {
+    pub token: Token,
+    pub left: Option<Box<Expression>>,
+    pub operator: String,
+    pub right: Option<Box<Expression>>,
+}
+
+impl Node for InfixExpresion {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+
+    fn as_string(&self) -> String {
+        let mut out = String::new();
+
+        if let Some(left_expr) = self.left.as_ref() {
+            write!(&mut out, "({} {} ", left_expr.as_string(), self.operator).unwrap();
+        } else {
+            write!(&mut out, "(<ERROR> {} ", self.operator).unwrap();
+        }
+
+        if let Some(right_expr) = self.right.as_ref() {
+            write!(&mut out, "{})", right_expr.as_string()).unwrap();
+        } else {
+            write!(&mut out, "<ERROR>)").unwrap();
         }
 
         out
