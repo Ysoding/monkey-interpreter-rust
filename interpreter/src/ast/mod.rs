@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::fmt::Write;
 
 use crate::lexer::token::Token;
@@ -8,19 +7,63 @@ pub trait Node {
     fn as_string(&self) -> String;
 }
 
-pub trait Statement: Node + Any {
-    fn statement_node(&self);
-    fn as_any(&self) -> &dyn Any;
-    fn st_name(&self) -> &str;
+pub enum Statement {
+    Let(LetStatement),
+    Return(ReturnStatement),
+    Expression(ExpressionStatement),
 }
 
-pub trait Expression: Node + Any {
-    fn expression_node(&self);
-    fn as_any(&self) -> &dyn Any;
+impl Statement {
+    pub fn name(&self) -> &str {
+        match self {
+            Statement::Let(_) => "LetStatement",
+            Statement::Return(_) => "ReturnStatement",
+            Statement::Expression(_) => "ExpressionStatement",
+        }
+    }
+}
+
+impl Node for Statement {
+    fn token_literal(&self) -> &str {
+        match self {
+            Statement::Let(stmt) => stmt.token_literal(),
+            Statement::Return(stmt) => stmt.token_literal(),
+            Statement::Expression(stmt) => stmt.token_literal(),
+        }
+    }
+
+    fn as_string(&self) -> String {
+        match self {
+            Statement::Let(stmt) => stmt.as_string(),
+            Statement::Return(stmt) => stmt.as_string(),
+            Statement::Expression(stmt) => stmt.as_string(),
+        }
+    }
+}
+
+pub enum Expression {
+    Identifier(Identifier),
+    IntegerLiteral(IntegerLiteral),
+}
+
+impl Node for Expression {
+    fn token_literal(&self) -> &str {
+        match self {
+            Expression::Identifier(expr) => expr.token_literal(),
+            Expression::IntegerLiteral(expr) => expr.token_literal(),
+        }
+    }
+
+    fn as_string(&self) -> String {
+        match self {
+            Expression::Identifier(expr) => expr.as_string(),
+            Expression::IntegerLiteral(expr) => expr.as_string(),
+        }
+    }
 }
 
 pub struct Program {
-    pub statements: Vec<Box<dyn Statement>>,
+    pub statements: Vec<Statement>,
 }
 
 impl Node for Program {
@@ -44,7 +87,7 @@ impl Node for Program {
 pub struct LetStatement {
     pub token: Token,
     pub name: Identifier,
-    pub value: Option<Box<dyn Expression>>,
+    pub value: Option<Expression>,
 }
 
 impl Node for LetStatement {
@@ -73,29 +116,9 @@ impl Node for LetStatement {
     }
 }
 
-impl Statement for LetStatement {
-    fn statement_node(&self) {}
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn st_name(&self) -> &str {
-        "LetStatement"
-    }
-}
-
 pub struct Identifier {
     pub token: Token,
     pub value: String,
-}
-
-impl Expression for Identifier {
-    fn expression_node(&self) {}
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 impl Node for Identifier {
@@ -110,19 +133,7 @@ impl Node for Identifier {
 
 pub struct ReturnStatement {
     pub token: Token,
-    pub return_value: Option<Box<dyn Expression>>,
-}
-
-impl Statement for ReturnStatement {
-    fn statement_node(&self) {}
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn st_name(&self) -> &str {
-        "ReturnStatement"
-    }
+    pub return_value: Option<Expression>,
 }
 
 impl Node for ReturnStatement {
@@ -146,19 +157,7 @@ impl Node for ReturnStatement {
 
 pub struct ExpressionStatement {
     pub token: Token,
-    pub expression: Option<Box<dyn Expression>>,
-}
-
-impl Statement for ExpressionStatement {
-    fn statement_node(&self) {}
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn st_name(&self) -> &str {
-        "ExpressionStatement"
-    }
+    pub expression: Option<Expression>,
 }
 
 impl Node for ExpressionStatement {
@@ -175,6 +174,21 @@ impl Node for ExpressionStatement {
     }
 }
 
+pub struct IntegerLiteral {
+    pub token: Token,
+    pub value: i64,
+}
+
+impl Node for IntegerLiteral {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+
+    fn as_string(&self) -> String {
+        self.token.literal.clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::lexer::token::*;
@@ -184,7 +198,7 @@ mod tests {
     #[test]
     fn test_string() {
         let p = Program {
-            statements: vec![Box::new(LetStatement {
+            statements: vec![Statement::Let(LetStatement {
                 token: Token {
                     typ: TokenType::Let,
                     literal: "let".to_string(),
@@ -196,7 +210,7 @@ mod tests {
                     },
                     value: "myVar".to_string(),
                 },
-                value: Some(Box::new(Identifier {
+                value: Some(Expression::Identifier(Identifier {
                     token: Token {
                         typ: TokenType::Identifier,
                         literal: "anotherVar".to_string(),

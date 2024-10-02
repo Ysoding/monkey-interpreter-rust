@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        Expression, ExpressionStatement, Identifier, LetStatement, Program, ReturnStatement,
-        Statement,
+        Expression, ExpressionStatement, Identifier, IntegerLiteral, LetStatement, Program,
+        ReturnStatement, Statement,
     },
     lexer::{
         token::{Token, TokenType},
@@ -11,8 +11,8 @@ use crate::{
     },
 };
 
-type PrefixParseFn = fn(&mut Parser) -> Box<dyn Expression>;
-type InfixParseFn = fn(&mut Parser, Box<dyn Expression>) -> Box<dyn Expression>;
+type PrefixParseFn = fn(&mut Parser) -> Expression;
+type InfixParseFn = fn(&mut Parser, Expression) -> Expression;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum Precedence {
@@ -45,13 +45,24 @@ impl<'a> Parser<'a> {
             infix_parse_fns: HashMap::new(),
         };
         p.register_prefix(TokenType::Identifier, Parser::parse_identifier);
+        p.register_prefix(TokenType::Int, Parser::parse_integer_literal);
         p.next_token();
         p.next_token();
         p
     }
 
-    fn parse_identifier(p: &mut Parser) -> Box<dyn Expression> {
-        Box::new(Identifier {
+    fn parse_integer_literal(p: &mut Parser) -> Expression {
+        let v = p.cur_token.literal.parse().unwrap();
+        let ret = IntegerLiteral {
+            token: p.cur_token.clone(),
+            value: v,
+        };
+
+        Expression::IntegerLiteral(ret)
+    }
+
+    fn parse_identifier(p: &mut Parser) -> Expression {
+        Expression::Identifier(Identifier {
             token: p.cur_token.clone(),
             value: p.cur_token.literal.clone(),
         })
@@ -78,11 +89,11 @@ impl<'a> Parser<'a> {
         program
     }
 
-    fn parse_statement(&mut self) -> Option<Box<dyn Statement>> {
+    fn parse_statement(&mut self) -> Option<Statement> {
         match self.cur_token.typ {
-            TokenType::Let => Some(Box::new(self.parse_let_statement()?)),
-            TokenType::Return => Some(Box::new(self.parse_ret_statement()?)),
-            _ => Some(Box::new(self.parse_expression_statement()?)),
+            TokenType::Let => Some(Statement::Let(self.parse_let_statement()?)),
+            TokenType::Return => Some(Statement::Return(self.parse_ret_statement()?)),
+            _ => Some(Statement::Expression(self.parse_expression_statement()?)),
         }
     }
 
@@ -99,7 +110,7 @@ impl<'a> Parser<'a> {
         Some(ret)
     }
 
-    fn parse_expression(&mut self, precedence: Precedence) -> Option<Box<dyn Expression>> {
+    fn parse_expression(&mut self, precedence: Precedence) -> Option<Expression> {
         let prefix = match self.prefix_parse_fns.get(&self.cur_token.typ) {
             Some(prefix_fn) => prefix_fn,
             None => return None,
@@ -192,9 +203,43 @@ impl<'a> Parser<'a> {
 mod tests {
     use core::panic;
 
-    use crate::ast::{ExpressionStatement, Node, ReturnStatement};
+    use crate::ast::Node;
 
     use super::*;
+
+    #[test]
+    fn test_integer_literal_expression() {
+        let input = "5;";
+        let mut l = Lexer::new(input.to_string());
+        let mut p = Parser::new(&mut l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program has not enough statements."
+        );
+
+        if let Statement::Expression(stmt) = &program.statements[0] {
+            let ex = stmt
+                .expression
+                .as_ref()
+                .expect("Expression should not be None");
+            if let Expression::IntegerLiteral(literal) = ex {
+                assert_eq!(literal.value, 5, "Literal value mismatch");
+                assert_eq!(
+                    literal.token_literal(),
+                    "5",
+                    "Literal token_literal mismatch"
+                );
+            } else {
+                panic!("Expected IntegerLiteral")
+            }
+        } else {
+            panic!("Expected ExpressionStatement")
+        }
+    }
 
     #[test]
     fn test_identifier_expression() {
@@ -210,26 +255,24 @@ mod tests {
             "program has incorrect number of statements."
         );
 
-        let stmt = program.statements[0]
-            .as_any()
-            .downcast_ref::<ExpressionStatement>()
-            .expect("Expected statement to be ExpressionStatement");
-
-        let ident = stmt
-            .expression
-            .as_ref()
-            .expect("Expression should not be None");
-        let id = ident
-            .as_any()
-            .downcast_ref::<Identifier>()
-            .expect("Expression is not an Identifier");
-
-        assert_eq!(id.value, "foobar", "Identifier value mismatch");
-        assert_eq!(
-            id.token_literal(),
-            "foobar",
-            "Identifier token_literal mismatch"
-        );
+        if let Statement::Expression(stmt) = &program.statements[0] {
+            let ident = stmt
+                .expression
+                .as_ref()
+                .expect("Expression should not be None");
+            if let Expression::Identifier(id) = ident {
+                assert_eq!(id.value, "foobar", "Identifier value mismatch");
+                assert_eq!(
+                    id.token_literal(),
+                    "foobar",
+                    "Identifier token_literal mismatch"
+                );
+            } else {
+                panic!("Expression is not an Identifier");
+            }
+        } else {
+            panic!("Expected statement to be ExpressionStatement");
+        }
     }
 
     #[test]
@@ -252,19 +295,15 @@ mod tests {
         );
 
         for st in &program.statements {
-            let ret_stmt = match st.as_any().downcast_ref::<ReturnStatement>() {
-                Some(ret_stmt) => ret_stmt,
-                None => {
-                    eprintln!("s not *ast.LetStatement. got={}", st.st_name());
-                    continue;
+            if let Statement::Return(ret_stmt) = st {
+                if ret_stmt.token_literal() != "return" {
+                    eprintln!(
+                        "returnStmt.TokenLiteral not 'return', got {}",
+                        ret_stmt.token_literal()
+                    );
                 }
-            };
-
-            if ret_stmt.token_literal() != "return" {
-                eprintln!(
-                    "returnStmt.TokenLiteral not 'return', got {}",
-                    ret_stmt.token_literal()
-                );
+            } else {
+                panic!("s not *ast.LetStatement. got={}", st.name());
             }
         }
     }
@@ -292,44 +331,41 @@ mod tests {
 
         for (i, &expected_ident) in test_cases.iter().enumerate() {
             let stmt = &program.statements[i];
-            if !test_let_statement(stmt.as_ref(), expected_ident) {
+            if !test_let_statement(stmt, expected_ident) {
                 return;
             }
         }
     }
 
-    fn test_let_statement(s: &dyn Statement, name: &str) -> bool {
+    fn test_let_statement(s: &Statement, name: &str) -> bool {
         if s.token_literal() != "let" {
             eprintln!("s.token_literal not 'let'. got={}", s.token_literal());
             return false;
         }
 
-        let let_stmt = match s.as_any().downcast_ref::<LetStatement>() {
-            Some(let_stmt) => let_stmt,
-            None => {
-                eprintln!("s not *ast.LetStatement. got={}", s.st_name());
+        if let Statement::Let(let_stmt) = s {
+            if let_stmt.name.value != name {
+                eprintln!(
+                    "let_stmt.name.value not '{}'. got={}",
+                    name, let_stmt.name.value
+                );
                 return false;
             }
-        };
 
-        if let_stmt.name.value != name {
-            eprintln!(
-                "let_stmt.name.value not '{}'. got={}",
-                name, let_stmt.name.value
-            );
+            if let_stmt.name.token_literal() != name {
+                eprintln!(
+                    "let_stmt.name.token_literal() not '{}'. got={}",
+                    name,
+                    let_stmt.name.token_literal()
+                );
+                return false;
+            }
+
+            true
+        } else {
+            eprintln!("s not *ast.LetStatement. got={}", s.name());
             return false;
         }
-
-        if let_stmt.name.token_literal() != name {
-            eprintln!(
-                "let_stmt.name.token_literal() not '{}'. got={}",
-                name,
-                let_stmt.name.token_literal()
-            );
-            return false;
-        }
-
-        true
     }
 
     fn check_parser_errors(p: &Parser) {
