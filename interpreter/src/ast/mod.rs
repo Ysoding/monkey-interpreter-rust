@@ -44,6 +44,17 @@ impl Node for Statement {
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
+    Prefix(PrefixExpresion),
+}
+
+impl Expression {
+    pub fn name(&self) -> &str {
+        match self {
+            Expression::Identifier(_) => "IdentifierExpression",
+            Expression::IntegerLiteral(_) => "IntegerLiteralExpression",
+            Expression::Prefix(_) => "PrefixExpresion",
+        }
+    }
 }
 
 impl Node for Expression {
@@ -51,6 +62,7 @@ impl Node for Expression {
         match self {
             Expression::Identifier(expr) => expr.token_literal(),
             Expression::IntegerLiteral(expr) => expr.token_literal(),
+            Expression::Prefix(expr) => todo!(),
         }
     }
 
@@ -58,6 +70,7 @@ impl Node for Expression {
         match self {
             Expression::Identifier(expr) => expr.as_string(),
             Expression::IntegerLiteral(expr) => expr.as_string(),
+            Expression::Prefix(_) => todo!(),
         }
     }
 }
@@ -186,6 +199,30 @@ impl Node for IntegerLiteral {
 
     fn as_string(&self) -> String {
         self.token.literal.clone()
+    }
+}
+
+pub struct PrefixExpresion {
+    pub token: Token,
+    pub operator: String,
+    pub right: Option<Box<Expression>>,
+}
+
+impl Node for PrefixExpresion {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+
+    fn as_string(&self) -> String {
+        let mut out = String::new();
+
+        if let Some(right_expr) = self.right.as_ref() {
+            write!(&mut out, "({} {})", self.operator, right_expr.as_string()).unwrap();
+        } else {
+            write!(&mut out, "({} <none>)", self.operator).unwrap();
+        }
+
+        out
     }
 }
 
