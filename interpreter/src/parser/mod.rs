@@ -1,9 +1,11 @@
+use core::panic;
 use std::collections::HashMap;
 
 use crate::{
     ast::{
-        BooleanExpression, Expression, ExpressionStatement, Identifier, InfixExpresion,
-        IntegerLiteral, LetStatement, PrefixExpresion, Program, ReturnStatement, Statement,
+        BlockStatement, BooleanExpression, Expression, ExpressionStatement, Identifier,
+        IfExpresion, InfixExpresion, IntegerLiteral, LetStatement, PrefixExpresion, Program,
+        ReturnStatement, Statement,
     },
     lexer::{
         token::{Token, TokenType},
@@ -51,6 +53,7 @@ impl<'a> Parser<'a> {
         p.register_prefix(TokenType::True, Parser::parse_boolean);
         p.register_prefix(TokenType::False, Parser::parse_boolean);
         p.register_prefix(TokenType::LParen, Parser::parse_grouped_expression);
+        p.register_prefix(TokenType::If, Parser::parse_if_expression);
 
         p.register_infix(TokenType::Plus, Parser::parse_infix_expression);
         p.register_infix(TokenType::Minus, Parser::parse_infix_expression);
@@ -66,11 +69,65 @@ impl<'a> Parser<'a> {
         p
     }
 
+    fn parse_if_expression(p: &mut Parser) -> Expression {
+        let token = p.cur_token.clone();
+
+        if !p.expect_peek(TokenType::LParen) {
+            panic!("expected `(`");
+        }
+        p.next_token();
+
+        let condition = Box::new(p.parse_expression(Precedence::Lowest).unwrap());
+
+        if !p.expect_peek(TokenType::RParen) {
+            panic!("expected `)`");
+        }
+
+        if !p.expect_peek(TokenType::LBrace) {
+            panic!("expected `{{`");
+        }
+
+        let mut ret = IfExpresion {
+            token,
+            condition,
+            consequence: p.parse_block_statement(),
+            alternative: None,
+        };
+
+        if p.peek_token_is(&TokenType::Else) {
+            p.next_token();
+
+            if !p.expect_peek(TokenType::LBrace) {
+                panic!("expected `{{`");
+            }
+            ret.alternative = Some(p.parse_block_statement());
+        }
+
+        Expression::If(ret)
+    }
+
+    fn parse_block_statement(&mut self) -> BlockStatement {
+        let mut ret = BlockStatement {
+            token: self.cur_token.clone(),
+            statements: Vec::new(),
+        };
+
+        self.next_token();
+
+        while !self.cur_token_is(&TokenType::RBrace) && !self.cur_token_is(&TokenType::Eof) {
+            if let Some(stmt) = self.parse_statement() {
+                ret.statements.push(stmt);
+            }
+            self.next_token();
+        }
+        ret
+    }
+
     fn parse_grouped_expression(p: &mut Parser) -> Expression {
         p.next_token();
         let exp = p.parse_expression(Precedence::Lowest);
         if !p.expect_peek(TokenType::RParen) {
-            panic!("expected `)` to match");
+            panic!("expected `)`");
         }
         exp.unwrap()
     }
@@ -309,14 +366,12 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use core::panic;
-    use std::{
-        any::Any,
-        fmt::{Debug, Display},
-    };
+    use std::{any::Any, fmt::Debug};
 
-    use crate::ast::{BooleanExpression, Node};
+    use crate::ast::Node;
 
     use super::*;
+
     #[test]
     fn test_operator_precedence_parsing() {
         struct TestCase {
@@ -499,8 +554,13 @@ mod tests {
 
             let stmt = &program.statements[0];
             if let Statement::Expression(stmt) = stmt {
+                let expr = stmt
+                    .expression
+                    .as_ref()
+                    .expect("Expression should not be None");
+
                 if !test_infix_expressions(
-                    &stmt.expression,
+                    expr,
                     test_case.left_val,
                     test_case.operator,
                     test_case.right_val,
@@ -606,6 +666,134 @@ mod tests {
         } else {
             panic!("Expected ExpressionStatement")
         }
+    }
+
+    #[test]
+    fn test_if_else_expressions() {
+        let input = "if (x < y) { x } else { y }";
+        let mut lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(&mut lexer);
+        let program = parser.parse_program();
+        check_parser_errors(&parser);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program has not enough statements."
+        );
+
+        let stmt = match &program.statements[0] {
+            Statement::Expression(stmt) => stmt,
+            _ => panic!(
+                "Expected ExpressionStatement, got {:?}",
+                program.statements[0].as_string()
+            ),
+        };
+
+        let if_expr = match stmt.expression.as_ref() {
+            Some(Expression::If(if_expr)) => if_expr,
+            _ => panic!("Expected IfExpression"),
+        };
+
+        assert!(
+            test_infix_expressions(&if_expr.condition, "x", "<", "y"),
+            "Failed condition test"
+        );
+
+        assert_eq!(
+            if_expr.consequence.statements.len(),
+            1,
+            "consequence should have 1 statement."
+        );
+
+        let consequence_expr = match &if_expr.consequence.statements[0] {
+            Statement::Expression(consequence) => consequence
+                .expression
+                .as_ref()
+                .expect("Expected expression in consequence"),
+            _ => panic!(
+                "Expected ExpressionStatement in consequence, got {:?}",
+                if_expr.consequence.statements[0].as_string()
+            ),
+        };
+
+        assert!(
+            test_identifier(consequence_expr, "x"),
+            "Failed consequence identifier test"
+        );
+
+        let alt_expr = match &if_expr.alternative {
+            Some(alt) => match &alt.statements[0] {
+                Statement::Expression(alt) => alt
+                    .expression
+                    .as_ref()
+                    .expect("Expected expression in consequence"),
+                _ => panic!("Expcted expression in alternative"),
+            },
+            _ => panic!("Expected alternative"),
+        };
+
+        assert!(
+            test_identifier(alt_expr, "y"),
+            "Failed alternative identifier test"
+        );
+    }
+
+    #[test]
+    fn test_if_expressions() {
+        let input = "if (x < y) { x }";
+        let mut lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(&mut lexer);
+        let program = parser.parse_program();
+        check_parser_errors(&parser);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program has not enough statements."
+        );
+
+        let stmt = match &program.statements[0] {
+            Statement::Expression(stmt) => stmt,
+            _ => panic!(
+                "Expected ExpressionStatement, got {:?}",
+                program.statements[0].as_string()
+            ),
+        };
+
+        let if_expr = match stmt.expression.as_ref() {
+            Some(Expression::If(if_expr)) => if_expr,
+            _ => panic!("Expected IfExpression"),
+        };
+
+        assert!(
+            test_infix_expressions(&if_expr.condition, "x", "<", "y"),
+            "Failed condition test"
+        );
+
+        assert_eq!(
+            if_expr.consequence.statements.len(),
+            1,
+            "consequence should have 1 statement."
+        );
+
+        let consequence_expr = match &if_expr.consequence.statements[0] {
+            Statement::Expression(consequence) => consequence
+                .expression
+                .as_ref()
+                .expect("Expected expression in consequence"),
+            _ => panic!(
+                "Expected ExpressionStatement in consequence, got {:?}",
+                if_expr.consequence.statements[0].as_string()
+            ),
+        };
+
+        assert!(
+            test_identifier(consequence_expr, "x"),
+            "Failed consequence identifier test"
+        );
+
+        assert!(if_expr.alternative.is_none(), "Alternative should be None");
     }
 
     #[test]
@@ -838,7 +1026,7 @@ mod tests {
     }
 
     fn test_infix_expressions<L, R>(
-        expr: &Option<Expression>,
+        expr: &Expression,
         left: L,
         operator: &'static str,
         right: R,
@@ -847,25 +1035,20 @@ mod tests {
         L: Any + Debug,
         R: Any + Debug,
     {
-        if let Some(expr) = expr {
-            if let Expression::Infix(infix) = expr {
-                if !test_literal_expression(&infix.left, &left) {
-                    return false;
-                }
-                if infix.operator != operator {
-                    eprintln!("operator is not '{}'. got='{}'", operator, infix.operator);
-                    return false;
-                }
-                if !test_literal_expression(&infix.right, &right) {
-                    return false;
-                }
-                true
-            } else {
-                eprintln!("expr is not ast.InfixExpression. got={}", expr.as_string());
-                false
+        if let Expression::Infix(infix) = expr {
+            if !test_literal_expression(&infix.left, &left) {
+                return false;
             }
+            if infix.operator != operator {
+                eprintln!("operator is not '{}'. got='{}'", operator, infix.operator);
+                return false;
+            }
+            if !test_literal_expression(&infix.right, &right) {
+                return false;
+            }
+            true
         } else {
-            eprintln!("expr is None");
+            eprintln!("expr is not ast.InfixExpression. got={}", expr.as_string());
             false
         }
     }

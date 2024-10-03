@@ -11,6 +11,7 @@ pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
     Expression(ExpressionStatement),
+    Block(BlockStatement),
 }
 
 impl Statement {
@@ -19,6 +20,7 @@ impl Statement {
             Statement::Let(_) => "LetStatement",
             Statement::Return(_) => "ReturnStatement",
             Statement::Expression(_) => "ExpressionStatement",
+            Statement::Block(_) => "BlockStatement",
         }
     }
 }
@@ -29,6 +31,7 @@ impl Node for Statement {
             Statement::Let(stmt) => stmt.token_literal(),
             Statement::Return(stmt) => stmt.token_literal(),
             Statement::Expression(stmt) => stmt.token_literal(),
+            Statement::Block(stmt) => stmt.token_literal(),
         }
     }
 
@@ -37,6 +40,7 @@ impl Node for Statement {
             Statement::Let(stmt) => stmt.as_string(),
             Statement::Return(stmt) => stmt.as_string(),
             Statement::Expression(stmt) => stmt.as_string(),
+            Statement::Block(stmt) => stmt.as_string(),
         }
     }
 }
@@ -47,6 +51,7 @@ pub enum Expression {
     Prefix(PrefixExpresion),
     Infix(InfixExpresion),
     Boolean(BooleanExpression),
+    If(IfExpresion),
 }
 
 impl Expression {
@@ -57,6 +62,7 @@ impl Expression {
             Expression::Prefix(_) => "PrefixExpresion",
             Expression::Infix(_) => "InfixExpresion",
             Expression::Boolean(_) => "BooleanExpression",
+            Expression::If(_) => "IfExpresion",
         }
     }
 }
@@ -69,6 +75,7 @@ impl Node for Expression {
             Expression::Prefix(expr) => expr.token_literal(),
             Expression::Infix(expr) => expr.token_literal(),
             Expression::Boolean(expr) => expr.token_literal(),
+            Expression::If(expr) => expr.token_literal(),
         }
     }
 
@@ -79,6 +86,7 @@ impl Node for Expression {
             Expression::Prefix(expr) => expr.as_string(),
             Expression::Infix(expr) => expr.as_string(),
             Expression::Boolean(expr) => expr.as_string(),
+            Expression::If(expr) => expr.as_string(),
         }
     }
 }
@@ -94,6 +102,25 @@ impl Node for Program {
         } else {
             self.statements[0].token_literal()
         }
+    }
+
+    fn as_string(&self) -> String {
+        let mut out = String::new();
+        for st in &self.statements {
+            write!(&mut out, "{}", st.as_string()).unwrap();
+        }
+        out
+    }
+}
+
+pub struct BlockStatement {
+    pub token: Token,
+    pub statements: Vec<Statement>,
+}
+
+impl Node for BlockStatement {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
     }
 
     fn as_string(&self) -> String {
@@ -277,6 +304,37 @@ impl Node for BooleanExpression {
 
     fn as_string(&self) -> String {
         self.token.literal.clone()
+    }
+}
+
+pub struct IfExpresion {
+    pub token: Token,
+    pub condition: Box<Expression>,
+    pub consequence: BlockStatement,
+    pub alternative: Option<BlockStatement>,
+}
+
+impl Node for IfExpresion {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+
+    fn as_string(&self) -> String {
+        let mut out = String::new();
+
+        write!(
+            &mut out,
+            "if{} {}",
+            self.condition.as_string(),
+            self.consequence.as_string()
+        )
+        .unwrap();
+
+        if let Some(ref alt) = self.alternative {
+            write!(&mut out, "else {}", alt.as_string()).unwrap();
+        }
+
+        out
     }
 }
 
