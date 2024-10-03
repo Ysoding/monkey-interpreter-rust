@@ -50,6 +50,7 @@ impl<'a> Parser<'a> {
         p.register_prefix(TokenType::Minus, Parser::parse_prefix_expression);
         p.register_prefix(TokenType::True, Parser::parse_boolean);
         p.register_prefix(TokenType::False, Parser::parse_boolean);
+        p.register_prefix(TokenType::LParen, Parser::parse_grouped_expression);
 
         p.register_infix(TokenType::Plus, Parser::parse_infix_expression);
         p.register_infix(TokenType::Minus, Parser::parse_infix_expression);
@@ -63,6 +64,15 @@ impl<'a> Parser<'a> {
         p.next_token();
         p.next_token();
         p
+    }
+
+    fn parse_grouped_expression(p: &mut Parser) -> Expression {
+        p.next_token();
+        let exp = p.parse_expression(Precedence::Lowest);
+        if !p.expect_peek(TokenType::RParen) {
+            panic!("expected `)` to match");
+        }
+        exp.unwrap()
     }
 
     fn parse_boolean(p: &mut Parser) -> Expression {
@@ -377,6 +387,26 @@ mod tests {
             TestCase {
                 input: "3 < 5 == true",
                 expected: "((3 < 5) == true)",
+            },
+            TestCase {
+                input: "1 + (2 + 3) + 4",
+                expected: "((1 + (2 + 3)) + 4)",
+            },
+            TestCase {
+                input: "(5 + 5) * 2",
+                expected: "((5 + 5) * 2)",
+            },
+            TestCase {
+                input: "2 / (5 + 5)",
+                expected: "(2 / (5 + 5))",
+            },
+            TestCase {
+                input: "-(5 + 5)",
+                expected: "(-(5 + 5))",
+            },
+            TestCase {
+                input: "!(true == true)",
+                expected: "(!(true == true))",
             },
         ];
 
