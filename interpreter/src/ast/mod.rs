@@ -52,6 +52,7 @@ pub enum Expression {
     Infix(InfixExpresion),
     Boolean(BooleanExpression),
     If(IfExpresion),
+    Function(FunctionLiteral),
 }
 
 impl Expression {
@@ -63,6 +64,7 @@ impl Expression {
             Expression::Infix(_) => "InfixExpresion",
             Expression::Boolean(_) => "BooleanExpression",
             Expression::If(_) => "IfExpresion",
+            Expression::Function(_) => "FunctionExpression",
         }
     }
 }
@@ -76,6 +78,7 @@ impl Node for Expression {
             Expression::Infix(expr) => expr.token_literal(),
             Expression::Boolean(expr) => expr.token_literal(),
             Expression::If(expr) => expr.token_literal(),
+            Expression::Function(expr) => expr.token_literal(),
         }
     }
 
@@ -87,6 +90,7 @@ impl Node for Expression {
             Expression::Infix(expr) => expr.as_string(),
             Expression::Boolean(expr) => expr.as_string(),
             Expression::If(expr) => expr.as_string(),
+            Expression::Function(expr) => expr.as_string(),
         }
     }
 }
@@ -333,6 +337,35 @@ impl Node for IfExpresion {
         if let Some(ref alt) = self.alternative {
             write!(&mut out, "else {}", alt.as_string()).unwrap();
         }
+
+        out
+    }
+}
+
+pub struct FunctionLiteral {
+    pub token: Token,
+    pub parameters: Vec<Identifier>,
+    pub body: BlockStatement,
+}
+
+impl Node for FunctionLiteral {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+
+    fn as_string(&self) -> String {
+        let mut out = String::new();
+
+        let ps: Vec<String> = self.parameters.iter().map(|p| p.as_string()).collect();
+
+        write!(
+            &mut out,
+            "{}({}) {}",
+            self.token_literal(),
+            ps.join(", "),
+            self.body.as_string()
+        )
+        .unwrap();
 
         out
     }

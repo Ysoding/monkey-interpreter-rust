@@ -3,9 +3,9 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        BlockStatement, BooleanExpression, Expression, ExpressionStatement, Identifier,
-        IfExpresion, InfixExpresion, IntegerLiteral, LetStatement, PrefixExpresion, Program,
-        ReturnStatement, Statement,
+        BlockStatement, BooleanExpression, Expression, ExpressionStatement, FunctionLiteral,
+        Identifier, IfExpresion, InfixExpresion, IntegerLiteral, LetStatement, PrefixExpresion,
+        Program, ReturnStatement, Statement,
     },
     lexer::{
         token::{Token, TokenType},
@@ -54,6 +54,7 @@ impl<'a> Parser<'a> {
         p.register_prefix(TokenType::False, Parser::parse_boolean);
         p.register_prefix(TokenType::LParen, Parser::parse_grouped_expression);
         p.register_prefix(TokenType::If, Parser::parse_if_expression);
+        p.register_prefix(TokenType::Function, Parser::parse_function_literal);
 
         p.register_infix(TokenType::Plus, Parser::parse_infix_expression);
         p.register_infix(TokenType::Minus, Parser::parse_infix_expression);
@@ -67,6 +68,61 @@ impl<'a> Parser<'a> {
         p.next_token();
         p.next_token();
         p
+    }
+
+    fn parse_function_literal(p: &mut Parser) -> Expression {
+        let token = p.cur_token.clone();
+
+        if !p.expect_peek(TokenType::LParen) {
+            panic!("expected `(`");
+        }
+
+        let parameters = p.parse_function_parameters();
+
+        if !p.expect_peek(TokenType::LBrace) {
+            panic!("expected `{{`, got={:?}", p.cur_token.typ);
+        }
+
+        let body = p.parse_block_statement();
+
+        Expression::Function(FunctionLiteral {
+            token,
+            parameters,
+            body,
+        })
+    }
+
+    fn parse_function_parameters(&mut self) -> Vec<Identifier> {
+        let mut ret: Vec<Identifier> = Vec::new();
+
+        if self.peek_token_is(&TokenType::RParen) {
+            self.next_token();
+            return ret;
+        }
+        self.next_token();
+
+        let ident = Identifier {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        };
+        ret.push(ident);
+
+        while self.peek_token_is(&TokenType::Comma) {
+            self.next_token();
+            self.next_token();
+
+            let ident = Identifier {
+                token: self.cur_token.clone(),
+                value: self.cur_token.literal.clone(),
+            };
+            ret.push(ident);
+        }
+
+        if !self.expect_peek(TokenType::RParen) {
+            panic!("expected `)`");
+        }
+
+        ret
     }
 
     fn parse_if_expression(p: &mut Parser) -> Expression {
@@ -371,7 +427,6 @@ mod tests {
     use crate::ast::Node;
 
     use super::*;
-
     #[test]
     fn test_operator_precedence_parsing() {
         struct TestCase {
@@ -566,6 +621,67 @@ mod tests {
                     test_case.right_val,
                 ) {
                     return;
+                }
+            } else {
+                panic!(
+                    "program.statements[0] is not ast.ExpressionStatement. got={}",
+                    stmt.name()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_function_parameter_parsing() {
+        struct TestCase {
+            input: &'static str,
+            expected_parapms: Vec<&'static str>,
+        }
+        let prefix_tests = [
+            TestCase {
+                input: "fn() {};",
+                expected_parapms: Vec::new(),
+            },
+            TestCase {
+                input: "fn(x) {};",
+                expected_parapms: vec!["x"],
+            },
+            TestCase {
+                input: "fn(x, y, z) {};",
+                expected_parapms: vec!["x", "y", "z"],
+            },
+        ];
+
+        for test_case in prefix_tests {
+            let mut l = Lexer::new(test_case.input.to_string());
+            let mut p = Parser::new(&mut l);
+            let program = p.parse_program();
+            check_parser_errors(&p);
+
+            assert_eq!(
+                program.statements.len(),
+                1,
+                "program has not enough statements."
+            );
+
+            let stmt = &program.statements[0];
+            if let Statement::Expression(stmt) = stmt {
+                let expr = stmt
+                    .expression
+                    .as_ref()
+                    .expect("Expression should not be None");
+                if let Expression::Function(fn_expr) = expr {
+                    assert_eq!(
+                        fn_expr.parameters.len(),
+                        test_case.expected_parapms.len(),
+                        "length parameters wrong.",
+                    );
+
+                    let ps: Vec<String> =
+                        fn_expr.parameters.iter().map(|x| x.value.clone()).collect();
+                    assert_eq!(ps, test_case.expected_parapms, "parameters not matched.");
+                } else {
+                    panic!("stmt is not ast.PrefixExpresion. got={}", expr.name());
                 }
             } else {
                 panic!(
@@ -794,6 +910,69 @@ mod tests {
         );
 
         assert!(if_expr.alternative.is_none(), "Alternative should be None");
+    }
+
+    #[test]
+    fn test_function_literal_parsing() {
+        let input = "fn(x, y) { x + y; }";
+        let mut l = Lexer::new(input.to_string());
+        let mut p = Parser::new(&mut l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program has not enough statements."
+        );
+
+        if let Statement::Expression(stmt) = &program.statements[0] {
+            let expr = stmt
+                .expression
+                .as_ref()
+                .expect("Expression should not be None");
+            match &expr {
+                Expression::Function(fn_expr) => {
+                    assert_eq!(
+                        fn_expr.parameters.len(),
+                        2,
+                        "function literal parameters wrong."
+                    );
+
+                    assert_eq!(
+                        fn_expr.parameters[0].value, "x",
+                        "first parameter not matched"
+                    );
+                    assert_eq!(
+                        fn_expr.parameters[1].value, "y",
+                        "second paramter not matched",
+                    );
+
+                    assert_eq!(
+                        fn_expr.body.statements.len(),
+                        1,
+                        "function body statements has not 1 statements."
+                    );
+
+                    let body_stmt = match &fn_expr.body.statements[0] {
+                        Statement::Expression(expr) => expr,
+                        v => panic!(
+                            "function body stmt is not ast.ExpressionStatement. got={}",
+                            v.as_string()
+                        ),
+                    };
+                    let body_expr = body_stmt
+                        .expression
+                        .as_ref()
+                        .expect("Expression should not be None");
+                    test_infix_expressions(body_expr, "x", "+", "y");
+                }
+
+                _ => panic!("Expected FunctionExpression"),
+            }
+        } else {
+            panic!("Expected ExpressionStatement")
+        }
     }
 
     #[test]
