@@ -285,7 +285,7 @@ impl<'a> Parser<'a> {
         self.peek_token = self.l.next_token();
     }
 
-    fn parse_program(&mut self) -> Program {
+    pub fn parse_program(&mut self) -> Program {
         let mut program = Program {
             statements: Vec::new(),
         };
