@@ -53,6 +53,7 @@ pub enum Expression {
     Boolean(BooleanExpression),
     If(IfExpresion),
     Function(FunctionLiteral),
+    Call(CallExpression),
 }
 
 impl Expression {
@@ -65,6 +66,7 @@ impl Expression {
             Expression::Boolean(_) => "BooleanExpression",
             Expression::If(_) => "IfExpresion",
             Expression::Function(_) => "FunctionExpression",
+            Expression::Call(_) => "CallExpression",
         }
     }
 }
@@ -79,6 +81,7 @@ impl Node for Expression {
             Expression::Boolean(expr) => expr.token_literal(),
             Expression::If(expr) => expr.token_literal(),
             Expression::Function(expr) => expr.token_literal(),
+            Expression::Call(expr) => expr.token_literal(),
         }
     }
 
@@ -91,6 +94,7 @@ impl Node for Expression {
             Expression::Boolean(expr) => expr.as_string(),
             Expression::If(expr) => expr.as_string(),
             Expression::Function(expr) => expr.as_string(),
+            Expression::Call(expr) => expr.as_string(),
         }
     }
 }
@@ -219,7 +223,19 @@ impl Node for ExpressionStatement {
 
     fn as_string(&self) -> String {
         if let Some(val) = &self.expression {
-            val.as_string()
+            {
+                let this = &val;
+                match this {
+                    Expression::Identifier(expr) => expr.as_string(),
+                    Expression::IntegerLiteral(expr) => expr.as_string(),
+                    Expression::Prefix(expr) => expr.as_string(),
+                    Expression::Infix(expr) => expr.as_string(),
+                    Expression::Boolean(expr) => expr.as_string(),
+                    Expression::If(expr) => expr.as_string(),
+                    Expression::Function(expr) => expr.as_string(),
+                    Expression::Call(expr) => expr.as_string(),
+                }
+            }
         } else {
             "".to_string()
         }
@@ -366,6 +382,28 @@ impl Node for FunctionLiteral {
             self.body.as_string()
         )
         .unwrap();
+
+        out
+    }
+}
+
+pub struct CallExpression {
+    pub token: Token,
+    pub function: Box<Expression>,
+    pub arguments: Vec<Expression>,
+}
+
+impl Node for CallExpression {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+
+    fn as_string(&self) -> String {
+        let mut out = String::new();
+
+        let ps: Vec<String> = self.arguments.iter().map(|p| p.as_string()).collect();
+
+        write!(&mut out, "{}({})", self.function.as_string(), ps.join(", "),).unwrap();
 
         out
     }

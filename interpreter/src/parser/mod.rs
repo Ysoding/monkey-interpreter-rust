@@ -3,9 +3,9 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        BlockStatement, BooleanExpression, Expression, ExpressionStatement, FunctionLiteral,
-        Identifier, IfExpresion, InfixExpresion, IntegerLiteral, LetStatement, PrefixExpresion,
-        Program, ReturnStatement, Statement,
+        BlockStatement, BooleanExpression, CallExpression, Expression, ExpressionStatement,
+        FunctionLiteral, Identifier, IfExpresion, InfixExpresion, IntegerLiteral, LetStatement,
+        PrefixExpresion, Program, ReturnStatement, Statement,
     },
     lexer::{
         token::{Token, TokenType},
@@ -64,6 +64,7 @@ impl<'a> Parser<'a> {
         p.register_infix(TokenType::Neq, Parser::parse_infix_expression);
         p.register_infix(TokenType::Lt, Parser::parse_infix_expression);
         p.register_infix(TokenType::Gt, Parser::parse_infix_expression);
+        p.register_infix(TokenType::LParen, Parser::parse_call_expression);
 
         p.next_token();
         p.next_token();
@@ -197,6 +198,39 @@ impl<'a> Parser<'a> {
         Expression::Boolean(ret)
     }
 
+    fn parse_call_expression(p: &mut Parser, function: Expression) -> Expression {
+        let token = p.cur_token.clone();
+        let arguments = p.parse_call_arguments();
+        Expression::Call(CallExpression {
+            token,
+            function: Box::new(function),
+            arguments,
+        })
+    }
+
+    fn parse_call_arguments(&mut self) -> Vec<Expression> {
+        let mut ret: Vec<Expression> = Vec::new();
+
+        if self.peek_token_is(&TokenType::RParen) {
+            self.next_token();
+            return ret;
+        }
+
+        self.next_token();
+        ret.push(self.parse_expression(Precedence::Lowest).unwrap());
+
+        while self.peek_token_is(&TokenType::Comma) {
+            self.next_token();
+            self.next_token();
+            ret.push(self.parse_expression(Precedence::Lowest).unwrap());
+        }
+
+        if !self.expect_peek(TokenType::RParen) {
+            panic!("expected `)`");
+        }
+        ret
+    }
+
     fn parse_infix_expression(p: &mut Parser, left: Expression) -> Expression {
         let mut ret = InfixExpresion {
             token: p.cur_token.clone(),
@@ -285,6 +319,7 @@ impl<'a> Parser<'a> {
             TokenType::Minus => Precedence::Sum,
             TokenType::Asterisk => Precedence::Product,
             TokenType::Slash => Precedence::Product,
+            TokenType::LParen => Precedence::Call,
             _ => Precedence::Lowest,
         }
     }
@@ -518,6 +553,18 @@ mod tests {
                 input: "!(true == true)",
                 expected: "(!(true == true))",
             },
+            TestCase {
+                input: "a + add(b * c) + d",
+                expected: "((a + add((b * c))) + d)",
+            },
+            TestCase {
+                input: "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+                expected: "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))",
+            },
+            TestCase {
+                input: "add(a + b + c * d / f + g)",
+                expected: "add((((a + b) + ((c * d) / f)) + g))",
+            },
         ];
 
         for test_case in tests {
@@ -689,6 +736,45 @@ mod tests {
                     stmt.name()
                 );
             }
+        }
+    }
+
+    #[test]
+    fn test_call_expression_parsing() {
+        let input = "add(1, 2 * 3, 4 + 5);";
+        let mut l = Lexer::new(input.to_string());
+        let mut p = Parser::new(&mut l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program has not enough statements."
+        );
+
+        if let Statement::Expression(stmt) = &program.statements[0] {
+            let expr = stmt
+                .expression
+                .as_ref()
+                .expect("Expression should not be None");
+            match &expr {
+                Expression::Call(call_expr) => {
+                    if !test_identifier(&call_expr.function, "add") {
+                        return;
+                    }
+
+                    assert_eq!(call_expr.arguments.len(), 3, "wrong length of arguments.");
+
+                    test_integer_literal(&call_expr.arguments[0], 1);
+                    test_infix_expressions(&call_expr.arguments[1], 2, "*", 3);
+                    test_infix_expressions(&call_expr.arguments[2], 4, "+", 5);
+                }
+
+                _ => panic!("Expected FunctionExpression"),
+            }
+        } else {
+            panic!("Expected ExpressionStatement")
         }
     }
 
