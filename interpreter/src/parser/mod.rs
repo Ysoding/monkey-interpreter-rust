@@ -13,8 +13,8 @@ use crate::{
     },
 };
 
-type PrefixParseFn = fn(&mut Parser) -> Expression;
-type InfixParseFn = fn(&mut Parser, Expression) -> Expression;
+type PrefixParseFn = fn(&mut Parser) -> Option<Expression>;
+type InfixParseFn = fn(&mut Parser, Expression) -> Option<Expression>;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum Precedence {
@@ -71,26 +71,26 @@ impl<'a> Parser<'a> {
         p
     }
 
-    fn parse_function_literal(p: &mut Parser) -> Expression {
+    fn parse_function_literal(p: &mut Parser) -> Option<Expression> {
         let token = p.cur_token.clone();
 
         if !p.expect_peek(TokenType::LParen) {
-            panic!("expected `(`");
+            return None;
         }
 
         let parameters = p.parse_function_parameters();
 
         if !p.expect_peek(TokenType::LBrace) {
-            panic!("expected `{{`, got={:?}", p.cur_token.typ);
+            return None;
         }
 
         let body = p.parse_block_statement();
 
-        Expression::Function(FunctionLiteral {
+        Some(Expression::Function(FunctionLiteral {
             token,
             parameters,
             body,
-        })
+        }))
     }
 
     fn parse_function_parameters(&mut self) -> Vec<Identifier> {
@@ -126,22 +126,22 @@ impl<'a> Parser<'a> {
         ret
     }
 
-    fn parse_if_expression(p: &mut Parser) -> Expression {
+    fn parse_if_expression(p: &mut Parser) -> Option<Expression> {
         let token = p.cur_token.clone();
 
         if !p.expect_peek(TokenType::LParen) {
-            panic!("expected `(`");
+            return None;
         }
         p.next_token();
 
         let condition = Box::new(p.parse_expression(Precedence::Lowest).unwrap());
 
         if !p.expect_peek(TokenType::RParen) {
-            panic!("expected `)`");
+            return None;
         }
 
         if !p.expect_peek(TokenType::LBrace) {
-            panic!("expected `{{`");
+            return None;
         }
 
         let mut ret = IfExpresion {
@@ -155,12 +155,12 @@ impl<'a> Parser<'a> {
             p.next_token();
 
             if !p.expect_peek(TokenType::LBrace) {
-                panic!("expected `{{`");
+                return None;
             }
             ret.alternative = Some(p.parse_block_statement());
         }
 
-        Expression::If(ret)
+        Some(Expression::If(ret))
     }
 
     fn parse_block_statement(&mut self) -> BlockStatement {
@@ -180,32 +180,32 @@ impl<'a> Parser<'a> {
         ret
     }
 
-    fn parse_grouped_expression(p: &mut Parser) -> Expression {
+    fn parse_grouped_expression(p: &mut Parser) -> Option<Expression> {
         p.next_token();
         let exp = p.parse_expression(Precedence::Lowest);
         if !p.expect_peek(TokenType::RParen) {
-            panic!("expected `)`");
+            return None;
         }
-        exp.unwrap()
+        exp
     }
 
-    fn parse_boolean(p: &mut Parser) -> Expression {
+    fn parse_boolean(p: &mut Parser) -> Option<Expression> {
         let ret = BooleanExpression {
             token: p.cur_token.clone(),
             value: p.cur_token_is(&TokenType::True),
         };
 
-        Expression::Boolean(ret)
+        Some(Expression::Boolean(ret))
     }
 
-    fn parse_call_expression(p: &mut Parser, function: Expression) -> Expression {
+    fn parse_call_expression(p: &mut Parser, function: Expression) -> Option<Expression> {
         let token = p.cur_token.clone();
         let arguments = p.parse_call_arguments();
-        Expression::Call(CallExpression {
+        Some(Expression::Call(CallExpression {
             token,
             function: Box::new(function),
             arguments,
-        })
+        }))
     }
 
     fn parse_call_arguments(&mut self) -> Vec<Expression> {
@@ -231,7 +231,7 @@ impl<'a> Parser<'a> {
         ret
     }
 
-    fn parse_infix_expression(p: &mut Parser, left: Expression) -> Expression {
+    fn parse_infix_expression(p: &mut Parser, left: Expression) -> Option<Expression> {
         let mut ret = InfixExpresion {
             token: p.cur_token.clone(),
             left: Some(Box::new(left)),
@@ -245,10 +245,10 @@ impl<'a> Parser<'a> {
             ret.right = Some(Box::new(right_expr));
         }
 
-        Expression::Infix(ret)
+        Some(Expression::Infix(ret))
     }
 
-    fn parse_prefix_expression(p: &mut Parser) -> Expression {
+    fn parse_prefix_expression(p: &mut Parser) -> Option<Expression> {
         let mut ret = PrefixExpresion {
             token: p.cur_token.clone(),
             operator: p.cur_token.literal.clone(),
@@ -260,24 +260,24 @@ impl<'a> Parser<'a> {
             ret.right = Some(Box::new(right_expr));
         }
 
-        Expression::Prefix(ret)
+        Some(Expression::Prefix(ret))
     }
 
-    fn parse_integer_literal(p: &mut Parser) -> Expression {
+    fn parse_integer_literal(p: &mut Parser) -> Option<Expression> {
         let v = p.cur_token.literal.parse().unwrap();
         let ret = IntegerLiteral {
             token: p.cur_token.clone(),
             value: v,
         };
 
-        Expression::IntegerLiteral(ret)
+        Some(Expression::IntegerLiteral(ret))
     }
 
-    fn parse_identifier(p: &mut Parser) -> Expression {
-        Expression::Identifier(Identifier {
+    fn parse_identifier(p: &mut Parser) -> Option<Expression> {
+        Some(Expression::Identifier(Identifier {
             token: p.cur_token.clone(),
             value: p.cur_token.literal.clone(),
-        })
+        }))
     }
 
     fn next_token(&mut self) {
@@ -359,7 +359,7 @@ impl<'a> Parser<'a> {
                 return None;
             }
         };
-        let mut left_exp = prefix(self);
+        let mut left_exp = prefix(self)?;
 
         while !self.peek_token_is(&TokenType::Semicolon) && precedence < self.peek_precedence() {
             let typ = self.peek_token.typ.clone();
@@ -370,15 +370,17 @@ impl<'a> Parser<'a> {
             };
 
             self.next_token();
-            left_exp = infix(self, left_exp);
+            left_exp = infix(self, left_exp)?;
         }
 
         Some(left_exp)
     }
 
     fn parse_ret_statement(&mut self) -> Option<ReturnStatement> {
-        let tok = self.cur_token.clone();
+        let token = self.cur_token.clone();
         self.next_token();
+
+        let return_value = self.parse_expression(Precedence::Lowest);
 
         let sem_tok = TokenType::Semicolon;
         while !self.cur_token_is(&sem_tok) {
@@ -386,8 +388,8 @@ impl<'a> Parser<'a> {
         }
 
         Some(ReturnStatement {
-            token: tok,
-            return_value: None,
+            token,
+            return_value,
         })
     }
 
@@ -406,17 +408,16 @@ impl<'a> Parser<'a> {
         if !self.expect_peek(TokenType::Assign) {
             return None;
         }
+        self.next_token();
+
+        let value = self.parse_expression(Precedence::Lowest);
 
         let sem_tok = TokenType::Semicolon;
         while !self.cur_token_is(&sem_tok) {
             self.next_token();
         }
 
-        Some(LetStatement {
-            token,
-            name,
-            value: None,
-        })
+        Some(LetStatement { token, name, value })
     }
 
     fn peek_token_is(&self, t: &TokenType) -> bool {
@@ -832,7 +833,7 @@ mod tests {
                         "exp.operator is not '{}' got={}",
                         test_case.operator, expr.operator
                     );
-                    test_literal_expression(&expr.right, &test_case.val);
+                    test_literal_expression(expr.right.as_ref().unwrap(), &test_case.val);
                 } else {
                     panic!("stmt is not ast.PrefixExpresion. got={}", expr.name());
                 }
@@ -1113,62 +1114,105 @@ mod tests {
 
     #[test]
     pub fn test_return_statement() {
-        let input = r#"
-        return 5;
-        return 10;
-        return 993 322;
-        "#;
+        struct TestCase {
+            input: &'static str,
+            expected_value: &'static str,
+        }
+        let tests = [
+            TestCase {
+                input: "return 5;",
+                expected_value: "5",
+            },
+            TestCase {
+                input: "return true;",
+                expected_value: "true",
+            },
+            TestCase {
+                input: "return x;",
+                expected_value: "x",
+            },
+        ];
+        for tt in tests {
+            let mut l = Lexer::new(tt.input.to_string());
+            let mut p = Parser::new(&mut l);
+            let program = p.parse_program();
+            check_parser_errors(&p);
 
-        let mut l = Lexer::new(input.to_string());
-        let mut p = Parser::new(&mut l);
-        let program = p.parse_program();
-        check_parser_errors(&p);
+            assert!(
+                program.statements.len() == 1,
+                "program.Statements does not contain 1 statements. got={}",
+                program.statements.len()
+            );
 
-        assert!(
-            program.statements.len() == 3,
-            "program.Statements does not contain 3 statements. got={}",
-            program.statements.len()
-        );
+            for st in &program.statements {
+                if let Statement::Return(ret_stmt) = st {
+                    assert_eq!(
+                        ret_stmt.return_value.as_ref().unwrap().as_string(),
+                        tt.expected_value,
+                        "returnStmt.ReturnValue not matched",
+                    );
 
-        for st in &program.statements {
-            if let Statement::Return(ret_stmt) = st {
-                if ret_stmt.token_literal() != "return" {
-                    eprintln!(
+                    assert_eq!(
+                        ret_stmt.token_literal(),
+                        "return",
                         "returnStmt.TokenLiteral not 'return', got {}",
                         ret_stmt.token_literal()
                     );
+                } else {
+                    panic!("s not *ast.LetStatement. got={}", st.name());
                 }
-            } else {
-                panic!("s not *ast.LetStatement. got={}", st.name());
             }
         }
     }
 
     #[test]
-    pub fn test_left_statement() {
-        let input = r#"
-        let x = 5;
-        let y = 10;
-        let z = 838383;
-        "#;
+    pub fn test_left_statements() {
+        struct TestCase {
+            input: &'static str,
+            expected_identifier: &'static str,
+            expected_value: Box<dyn Any>,
+        }
+        let tests = [
+            TestCase {
+                input: "let x = 5;",
+                expected_identifier: "x",
+                expected_value: Box::new(5),
+            },
+            TestCase {
+                input: "let y = true;",
+                expected_identifier: "y",
+                expected_value: Box::new(true),
+            },
+            TestCase {
+                input: "let foobar = y;",
+                expected_identifier: "foobar",
+                expected_value: Box::new("y"),
+            },
+        ];
 
-        let mut l = Lexer::new(input.to_string());
-        let mut p = Parser::new(&mut l);
-        let program = p.parse_program();
-        check_parser_errors(&p);
+        for tt in tests {
+            let mut l = Lexer::new(tt.input.to_string());
+            let mut p = Parser::new(&mut l);
+            let program = p.parse_program();
+            check_parser_errors(&p);
 
-        assert!(
-            program.statements.len() == 3,
-            "program.Statements does not contain 3 statements. got={}",
-            program.statements.len()
-        );
+            assert!(
+                program.statements.len() == 1,
+                "program.Statements does not contain 1 statements. got={}",
+                program.statements.len()
+            );
 
-        let test_cases = ["x", "y", "foo"];
+            let stmt = &program.statements[0];
 
-        for (i, &expected_ident) in test_cases.iter().enumerate() {
-            let stmt = &program.statements[i];
-            if !test_let_statement(stmt, expected_ident) {
+            if !test_let_statement(stmt, tt.expected_identifier) {
                 return;
+            }
+
+            match stmt {
+                Statement::Let(let_st) => {
+                    test_literal_expression(let_st.value.as_ref().unwrap(), &tt.expected_value);
+                }
+                _ => panic!("expected let statement"),
             }
         }
     }
@@ -1270,22 +1314,17 @@ mod tests {
         }
     }
 
-    fn test_literal_expression(expr: &Option<Box<Expression>>, expected: &dyn Any) -> bool {
-        if let Some(ref expr) = expr {
-            if let Some(&val) = expected.downcast_ref::<i32>() {
-                test_integer_literal(expr, val as i64)
-            } else if let Some(&val) = expected.downcast_ref::<i64>() {
-                test_integer_literal(expr, val)
-            } else if let Some(&val) = expected.downcast_ref::<&str>() {
-                test_identifier(expr, val)
-            } else if let Some(&val) = expected.downcast_ref::<bool>() {
-                test_boolean_literal(expr, val)
-            } else {
-                eprintln!("type of expr not handled. got={}", expr.as_string());
-                false
-            }
+    fn test_literal_expression(expr: &Expression, expected: &dyn Any) -> bool {
+        if let Some(&val) = expected.downcast_ref::<i32>() {
+            test_integer_literal(expr, val as i64)
+        } else if let Some(&val) = expected.downcast_ref::<i64>() {
+            test_integer_literal(expr, val)
+        } else if let Some(&val) = expected.downcast_ref::<&str>() {
+            test_identifier(expr, val)
+        } else if let Some(&val) = expected.downcast_ref::<bool>() {
+            test_boolean_literal(expr, val)
         } else {
-            eprintln!("expr is None");
+            eprintln!("type of expr not handled. got={}", expr.as_string());
             false
         }
     }
@@ -1301,14 +1340,14 @@ mod tests {
         R: Any + Debug,
     {
         if let Expression::Infix(infix) = expr {
-            if !test_literal_expression(&infix.left, &left) {
+            if !test_literal_expression(infix.left.as_ref().unwrap(), &left) {
                 return false;
             }
             if infix.operator != operator {
                 eprintln!("operator is not '{}'. got='{}'", operator, infix.operator);
                 return false;
             }
-            if !test_literal_expression(&infix.right, &right) {
+            if !test_literal_expression(infix.right.as_ref().unwrap(), &right) {
                 return false;
             }
             true
