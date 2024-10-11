@@ -1,6 +1,6 @@
 use std::io::{BufRead, Write};
 
-use crate::{ast::Node, lexer::Lexer, parser::Parser};
+use crate::{evaluator::Evaluator, lexer::Lexer, parser::Parser};
 
 pub fn start(mut input: impl BufRead, mut output: impl Write) {
     let mut buffer = String::new();
@@ -18,7 +18,9 @@ pub fn start(mut input: impl BufRead, mut output: impl Write) {
             print_parse_errors(&mut output, &p.errors);
             continue;
         }
-        writeln!(output, "{}", program.as_string()).unwrap();
+        let mut eval = Evaluator::new();
+        let evaluated = eval.eval_program(program);
+        writeln!(output, "{}", evaluated).unwrap();
 
         buffer.clear();
     }

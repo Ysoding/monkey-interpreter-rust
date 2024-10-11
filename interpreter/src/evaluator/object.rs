@@ -1,5 +1,6 @@
 use core::fmt;
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Object {
     Integer(i64),
     Boolean(bool),
