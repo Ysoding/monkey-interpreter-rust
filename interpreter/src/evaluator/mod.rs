@@ -14,7 +14,10 @@ impl Evaluator {
     }
 
     pub fn eval_program(&mut self, prog: Program) -> Object {
-        self.eval_statements(prog.statements)
+        match self.eval_statements(prog.statements) {
+            Object::Return(v) => *v,
+            o => o,
+        }
     }
 
     fn eval_statement(&mut self, stmt: Statement) -> Object {
@@ -23,7 +26,7 @@ impl Evaluator {
             Statement::Return(ret_stmt) => {
                 Object::Return(Box::new(self.eval_expr(ret_stmt.return_value.unwrap())))
             }
-            _ => panic!("error"),
+            v => Object::Error(format!("unsupport statement {}", v)),
         }
     }
 
@@ -34,7 +37,7 @@ impl Evaluator {
             Expression::Prefix(v) => self.eval_prefix_expr(v),
             Expression::Infix(v) => self.eval_infix_expr(v),
             Expression::If(v) => self.eval_if_expr(v),
-            _ => panic!("error"),
+            v => Object::Error(format!("unsupport expression {}", v)),
         }
     }
 
@@ -61,7 +64,7 @@ impl Evaluator {
     fn eval_if_expr(&mut self, if_expr: IfExpresion) -> Object {
         let obj = self.eval_expr(*if_expr.condition);
         match self.otb(obj) {
-            Some(v) => {
+            Ok(v) => {
                 if v {
                     self.eval_block_stmt(if_expr.consequence)
                 } else {
@@ -71,15 +74,16 @@ impl Evaluator {
                     }
                 }
             }
-            None => Object::Null,
+            Err(err) => err,
         }
     }
 
-    fn otb(&mut self, object: Object) -> Option<bool> {
+    fn otb(&mut self, object: Object) -> Result<bool, Object> {
         match object {
-            Object::Boolean(i) => Some(i),
-            Object::Integer(v) => Some(v != 0),
-            _ => None,
+            Object::Boolean(i) => Ok(i),
+            Object::Integer(v) => Ok(v != 0),
+            Object::Error(v) => Err(Object::Error(v)),
+            v => Err(Object::Error(format!("{} is not a bool", v))),
         }
     }
 
@@ -94,24 +98,24 @@ impl Evaluator {
                         let i1 = self.oti(obj1);
                         let i2 = self.oti(obj2);
                         match (i1, i2) {
-                            (Some(v1), Some(v2)) => Object::Integer(v1 - v2),
-                            (_, _) => Object::Null,
+                            (Ok(v1), Ok(v2)) => Object::Integer(v1 - v2),
+                            (Err(err), _) | (_, Err(err)) => err,
                         }
                     }
                     "*" => {
                         let i1 = self.oti(obj1);
                         let i2 = self.oti(obj2);
                         match (i1, i2) {
-                            (Some(v1), Some(v2)) => Object::Integer(v1 * v2),
-                            (_, _) => Object::Null,
+                            (Ok(v1), Ok(v2)) => Object::Integer(v1 * v2),
+                            (Err(err), _) | (_, Err(err)) => err,
                         }
                     }
                     "/" => {
                         let i1 = self.oti(obj1);
                         let i2 = self.oti(obj2);
                         match (i1, i2) {
-                            (Some(v1), Some(v2)) => Object::Integer(v1 / v2),
-                            (_, _) => Object::Null,
+                            (Ok(v1), Ok(v2)) => Object::Integer(v1 / v2),
+                            (Err(err), _) | (_, Err(err)) => err,
                         }
                     }
                     "<" => Object::Boolean(obj1 < obj2),
@@ -125,34 +129,38 @@ impl Evaluator {
         }
     }
 
-    fn oti(&mut self, object: Object) -> Option<i64> {
+    fn oti(&mut self, object: Object) -> Result<i64, Object> {
         match object {
-            Object::Integer(i) => Some(i),
-            _ => None,
+            Object::Integer(i) => Ok(i),
+            Object::Error(v) => Err(Object::Error(v)),
+            v => Err(Object::Error(format!("{} is not an integer", v))),
         }
     }
 
     fn object_add(&mut self, obj1: Object, obj2: Object) -> Object {
         match (obj1, obj2) {
             (Object::Integer(v1), Object::Integer(v2)) => Object::Integer(v1 + v2),
-            (_, _) => Object::Null,
+            (Object::Error(v), _) | (_, Object::Error(v)) => Object::Error(v),
+            (x, y) => Object::Error(format!("{:?} and {:?} are not addable", x, y)),
         }
     }
 
     fn eval_prefix_expr(&mut self, prefix: PrefixExpresion) -> Object {
         let object = self.eval_expr(*prefix.right.unwrap());
         match prefix.operator.as_str() {
-            "!" => match object {
-                Object::Integer(v) => Object::Boolean(v == 0),
-                Object::Boolean(v) => Object::Boolean(!v),
-                Object::Null => Object::Boolean(true),
-                Object::Return(_) => todo!(),
+            "!" => match self.otb(object) {
+                Ok(v) => Object::Boolean(!v),
+                Err(err) => err,
             },
-            "-" => match object {
-                Object::Integer(v) => Object::Integer(-v),
-                _ => Object::Null,
+            "-" => match self.oti(object) {
+                Ok(v) => Object::Integer(-v),
+                Err(err) => err,
             },
-            _ => panic!("error"),
+            "+" => match self.oti(object) {
+                Ok(v) => Object::Integer(v),
+                Err(err) => err,
+            },
+            v => Object::Error(format!("{} unknow prefix operation", v)),
         }
     }
 }
@@ -206,10 +214,7 @@ mod tests {
 
         for case in cases {
             let evaluated = test_eval(case.input);
-            match evaluated {
-                Object::Return(v) => assert_eq!(*v, case.expected),
-                _ => panic!("error"),
-            }
+            assert_eq!(evaluated, case.expected)
         }
     }
 
@@ -472,7 +477,7 @@ mod tests {
     fn test_bool_object(evaluated: Object, expected: bool) {
         match evaluated {
             Object::Boolean(v) => assert_eq!(v, expected),
-            _ => panic!("invalid object, need Boolean"),
+            v => panic!("invalid object {}, need Boolean", v),
         }
     }
 

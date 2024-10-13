@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::fmt::{self, Write};
 
 use crate::lexer::token::Token;
 
@@ -25,6 +25,16 @@ impl Statement {
     }
 }
 
+impl fmt::Display for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Statement::Let(_) => write!(f, "LetStatement"),
+            Statement::Return(_) => write!(f, "ReturnStatement"),
+            Statement::Expression(_) => write!(f, "ExpressionStatement"),
+            Statement::Block(_) => write!(f, "BlockStatement"),
+        }
+    }
+}
 impl Node for Statement {
     fn token_literal(&self) -> &str {
         match self {
@@ -56,17 +66,17 @@ pub enum Expression {
     Call(CallExpression),
 }
 
-impl Expression {
-    pub fn name(&self) -> &str {
-        match self {
-            Expression::Identifier(_) => "IdentifierExpression",
-            Expression::IntegerLiteral(_) => "IntegerLiteralExpression",
-            Expression::Prefix(_) => "PrefixExpresion",
-            Expression::Infix(_) => "InfixExpresion",
-            Expression::Boolean(_) => "BooleanExpression",
-            Expression::If(_) => "IfExpresion",
-            Expression::Function(_) => "FunctionExpression",
-            Expression::Call(_) => "CallExpression",
+impl fmt::Display for Expression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Expression::Identifier(_) => write!(f, "IdentifierExpression"),
+            Expression::IntegerLiteral(_) => write!(f, "IntegerLiteralExpression"),
+            Expression::Prefix(_) => write!(f, "PrefixExpresion"),
+            Expression::Infix(_) => write!(f, "InfixExpresion"),
+            Expression::Boolean(_) => write!(f, "BooleanExpression"),
+            Expression::If(_) => write!(f, "IfExpresion"),
+            Expression::Function(_) => write!(f, "FunctionExpression"),
+            Expression::Call(_) => write!(f, "CallExpression"),
         }
     }
 }

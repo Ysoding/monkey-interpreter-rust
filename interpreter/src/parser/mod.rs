@@ -729,7 +729,7 @@ mod tests {
                         fn_expr.parameters.iter().map(|x| x.value.clone()).collect();
                     assert_eq!(ps, test_case.expected_parapms, "parameters not matched.");
                 } else {
-                    panic!("stmt is not ast.PrefixExpresion. got={}", expr.name());
+                    panic!("stmt is not ast.PrefixExpresion. got={}", expr);
                 }
             } else {
                 panic!(
@@ -835,7 +835,7 @@ mod tests {
                     );
                     test_literal_expression(expr.right.as_ref().unwrap(), &test_case.val);
                 } else {
-                    panic!("stmt is not ast.PrefixExpresion. got={}", expr.name());
+                    panic!("stmt is not ast.PrefixExpresion. got={}", expr);
                 }
             } else {
                 panic!(
@@ -1267,7 +1267,7 @@ mod tests {
 
             true
         } else {
-            eprintln!("expr not ast.IntegerLiteral. got={}", expr.name());
+            eprintln!("expr not ast.IntegerLiteral. got={}", expr);
             false
         }
     }
@@ -1288,7 +1288,7 @@ mod tests {
             }
             true
         } else {
-            eprintln!("expr not ast.IntegerLiteral. got={}", expr.name());
+            eprintln!("expr not ast.IntegerLiteral. got={}", expr);
             false
         }
     }
@@ -1309,7 +1309,7 @@ mod tests {
             }
             true
         } else {
-            eprintln!("expr not ast.IntegerLiteral. got={}", expr.name());
+            eprintln!("expr not ast.IntegerLiteral. got={}", expr);
             false
         }
     }
