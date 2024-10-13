@@ -4,7 +4,14 @@ use core::fmt;
 pub enum Object {
     Integer(i64),
     Boolean(bool),
+    Return(Box<Object>),
     Null,
+}
+
+impl Object {
+    pub fn is_returned(&self) -> bool {
+        matches!(*self, Object::Return(_))
+    }
 }
 
 impl fmt::Display for Object {
@@ -18,6 +25,7 @@ impl fmt::Display for Object {
                     write!(f, "false")
                 }
             }
+            Object::Return(ref v) => write!(f, "{}", *v),
             Object::Null => write!(f, "null"),
         }
     }

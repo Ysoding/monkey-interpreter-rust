@@ -1,6 +1,8 @@
 use object::Object;
 
-use crate::ast::{Expression, InfixExpresion, PrefixExpresion, Program, Statement};
+use crate::ast::{
+    BlockStatement, Expression, IfExpresion, InfixExpresion, PrefixExpresion, Program, Statement,
+};
 
 pub mod object;
 
@@ -11,19 +13,16 @@ impl Evaluator {
         Self {}
     }
 
-    pub fn eval_program(&mut self, mut prog: Program) -> Object {
-        match prog.statements.len() {
-            0 => Object::Null,
-            _ => {
-                let stmt = prog.statements.remove(0);
-                self.eval_statement(stmt)
-            }
-        }
+    pub fn eval_program(&mut self, prog: Program) -> Object {
+        self.eval_statements(prog.statements)
     }
 
     fn eval_statement(&mut self, stmt: Statement) -> Object {
         match stmt {
             Statement::Expression(expr) => self.eval_expr(expr.expression.unwrap()),
+            Statement::Return(ret_stmt) => {
+                Object::Return(Box::new(self.eval_expr(ret_stmt.return_value.unwrap())))
+            }
             _ => panic!("error"),
         }
     }
@@ -34,7 +33,53 @@ impl Evaluator {
             Expression::Boolean(v) => Object::Boolean(v.value),
             Expression::Prefix(v) => self.eval_prefix_expr(v),
             Expression::Infix(v) => self.eval_infix_expr(v),
+            Expression::If(v) => self.eval_if_expr(v),
             _ => panic!("error"),
+        }
+    }
+
+    fn eval_statements(&mut self, mut stmts: Vec<Statement>) -> Object {
+        match stmts.len() {
+            0 => Object::Null,
+            1 => self.eval_statement(stmts.remove(0)),
+            _ => {
+                let stmt = stmts.remove(0);
+                let obj = self.eval_statement(stmt);
+                if obj.is_returned() {
+                    obj
+                } else {
+                    self.eval_statements(stmts)
+                }
+            }
+        }
+    }
+
+    fn eval_block_stmt(&mut self, bstmt: BlockStatement) -> Object {
+        self.eval_statements(bstmt.statements)
+    }
+
+    fn eval_if_expr(&mut self, if_expr: IfExpresion) -> Object {
+        let obj = self.eval_expr(*if_expr.condition);
+        match self.otb(obj) {
+            Some(v) => {
+                if v {
+                    self.eval_block_stmt(if_expr.consequence)
+                } else {
+                    match if_expr.alternative {
+                        Some(alt) => self.eval_block_stmt(alt),
+                        None => Object::Null,
+                    }
+                }
+            }
+            None => Object::Null,
+        }
+    }
+
+    fn otb(&mut self, object: Object) -> Option<bool> {
+        match object {
+            Object::Boolean(i) => Some(i),
+            Object::Integer(v) => Some(v != 0),
+            _ => None,
         }
     }
 
@@ -101,6 +146,7 @@ impl Evaluator {
                 Object::Integer(v) => Object::Boolean(v == 0),
                 Object::Boolean(v) => Object::Boolean(!v),
                 Object::Null => Object::Boolean(true),
+                Object::Return(_) => todo!(),
             },
             "-" => match object {
                 Object::Integer(v) => Object::Integer(-v),
@@ -121,6 +167,94 @@ impl Default for Evaluator {
 mod tests {
     use super::*;
     use crate::{lexer::Lexer, parser::Parser};
+
+    #[test]
+    fn test_return_stmt() {
+        struct TestCase {
+            input: &'static str,
+            expected: Object,
+        }
+        let cases = vec![
+            TestCase {
+                input: "return 10;",
+                expected: Object::Integer(10),
+            },
+            TestCase {
+                input: "return 10; 9;",
+                expected: Object::Integer(10),
+            },
+            TestCase {
+                input: "return 2 * 5; 9;",
+                expected: Object::Integer(10),
+            },
+            TestCase {
+                input: "9; return 2 * 5; 9;",
+                expected: Object::Integer(10),
+            },
+            TestCase {
+                input: "
+                if (10 > 1) {
+                    if (10 > 1) {
+                        return 10;
+                    }
+                    return 1;
+                }
+                ",
+                expected: Object::Integer(10),
+            },
+        ];
+
+        for case in cases {
+            let evaluated = test_eval(case.input);
+            match evaluated {
+                Object::Return(v) => assert_eq!(*v, case.expected),
+                _ => panic!("error"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_if_else_expression() {
+        struct TestCase {
+            input: &'static str,
+            expected: Object,
+        }
+        let cases = vec![
+            TestCase {
+                input: "if (true) { 10 }",
+                expected: Object::Integer(10),
+            },
+            TestCase {
+                input: "if (false) { 10 }",
+                expected: Object::Null,
+            },
+            TestCase {
+                input: "if (1) { 10 }",
+                expected: Object::Integer(10),
+            },
+            TestCase {
+                input: "if (1 < 2) { 10 }",
+                expected: Object::Integer(10),
+            },
+            TestCase {
+                input: "if (1 > 2) { 10 }",
+                expected: Object::Null,
+            },
+            TestCase {
+                input: "if (1 > 2) { 10 } else { 20 }",
+                expected: Object::Integer(20),
+            },
+            TestCase {
+                input: "if (1 < 2) { 10 } else { 20 }",
+                expected: Object::Integer(10),
+            },
+        ];
+
+        for case in cases {
+            let evaluated = test_eval(case.input);
+            assert_eq!(evaluated, case.expected);
+        }
+    }
 
     #[test]
     fn test_bang_operator() {
@@ -345,7 +479,7 @@ mod tests {
     fn test_integer_object(evaluated: Object, expected: i64) {
         match evaluated {
             Object::Integer(v) => assert_eq!(v, expected),
-            _ => panic!("invalid object, need Integer"),
+            _ => panic!("invalid object {}, need Integer", evaluated),
         }
     }
 
