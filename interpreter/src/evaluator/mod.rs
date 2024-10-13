@@ -1,6 +1,6 @@
 use object::Object;
 
-use crate::ast::{Expression, PrefixExpresion, Program, Statement};
+use crate::ast::{Expression, InfixExpresion, PrefixExpresion, Program, Statement};
 
 pub mod object;
 
@@ -33,7 +33,64 @@ impl Evaluator {
             Expression::IntegerLiteral(v) => Object::Integer(v.value),
             Expression::Boolean(v) => Object::Boolean(v.value),
             Expression::Prefix(v) => self.eval_prefix_expr(v),
+            Expression::Infix(v) => self.eval_infix_expr(v),
             _ => panic!("error"),
+        }
+    }
+
+    fn eval_infix_expr(&mut self, infix: InfixExpresion) -> Object {
+        match (infix.left, infix.right) {
+            (Some(left_expr), Some(right_expr)) => {
+                let obj1 = self.eval_expr(*left_expr);
+                let obj2 = self.eval_expr(*right_expr);
+                match infix.operator.as_str() {
+                    "+" => self.object_add(obj1, obj2),
+                    "-" => {
+                        let i1 = self.oti(obj1);
+                        let i2 = self.oti(obj2);
+                        match (i1, i2) {
+                            (Some(v1), Some(v2)) => Object::Integer(v1 - v2),
+                            (_, _) => Object::Null,
+                        }
+                    }
+                    "*" => {
+                        let i1 = self.oti(obj1);
+                        let i2 = self.oti(obj2);
+                        match (i1, i2) {
+                            (Some(v1), Some(v2)) => Object::Integer(v1 * v2),
+                            (_, _) => Object::Null,
+                        }
+                    }
+                    "/" => {
+                        let i1 = self.oti(obj1);
+                        let i2 = self.oti(obj2);
+                        match (i1, i2) {
+                            (Some(v1), Some(v2)) => Object::Integer(v1 / v2),
+                            (_, _) => Object::Null,
+                        }
+                    }
+                    "<" => Object::Boolean(obj1 < obj2),
+                    ">" => Object::Boolean(obj1 > obj2),
+                    "==" => Object::Boolean(obj1 == obj2),
+                    "!=" => Object::Boolean(obj1 != obj2),
+                    _ => Object::Null,
+                }
+            }
+            (_, _) => Object::Null,
+        }
+    }
+
+    fn oti(&mut self, object: Object) -> Option<i64> {
+        match object {
+            Object::Integer(i) => Some(i),
+            _ => None,
+        }
+    }
+
+    fn object_add(&mut self, obj1: Object, obj2: Object) -> Object {
+        match (obj1, obj2) {
+            (Object::Integer(v1), Object::Integer(v2)) => Object::Integer(v1 + v2),
+            (_, _) => Object::Null,
         }
     }
 
@@ -119,6 +176,82 @@ mod tests {
                 input: "false",
                 expected: false,
             },
+            TestCase {
+                input: "true",
+                expected: true,
+            },
+            TestCase {
+                input: "false",
+                expected: false,
+            },
+            TestCase {
+                input: "1 < 2",
+                expected: true,
+            },
+            TestCase {
+                input: "1 > 2",
+                expected: false,
+            },
+            TestCase {
+                input: "1 < 1",
+                expected: false,
+            },
+            TestCase {
+                input: "1 > 1",
+                expected: false,
+            },
+            TestCase {
+                input: "1 == 1",
+                expected: true,
+            },
+            TestCase {
+                input: "1 != 1",
+                expected: false,
+            },
+            TestCase {
+                input: "1 == 2",
+                expected: false,
+            },
+            TestCase {
+                input: "1 != 2",
+                expected: true,
+            },
+            TestCase {
+                input: "true == true",
+                expected: true,
+            },
+            TestCase {
+                input: "false == false",
+                expected: true,
+            },
+            TestCase {
+                input: "true == false",
+                expected: false,
+            },
+            TestCase {
+                input: "true != false",
+                expected: true,
+            },
+            TestCase {
+                input: "false != true",
+                expected: true,
+            },
+            TestCase {
+                input: "(1 < 2) == true",
+                expected: true,
+            },
+            TestCase {
+                input: "(1 < 2) == false",
+                expected: false,
+            },
+            TestCase {
+                input: "(1 > 2) == true",
+                expected: false,
+            },
+            TestCase {
+                input: "(1 > 2) == false",
+                expected: true,
+            },
         ];
 
         for case in cases {
@@ -149,6 +282,50 @@ mod tests {
             TestCase {
                 input: "-10",
                 expected: -10,
+            },
+            TestCase {
+                input: "5 + 5 + 5 + 5 - 10",
+                expected: 10,
+            },
+            TestCase {
+                input: "2 * 2 * 2 * 2 * 2",
+                expected: 32,
+            },
+            TestCase {
+                input: "-50 + 100 + -50",
+                expected: 0,
+            },
+            TestCase {
+                input: "5 * 2 + 10",
+                expected: 20,
+            },
+            TestCase {
+                input: "5 + 2 * 10",
+                expected: 25,
+            },
+            TestCase {
+                input: "20 + 2 * -10",
+                expected: 0,
+            },
+            TestCase {
+                input: "50 / 2 * 2 + 10",
+                expected: 60,
+            },
+            TestCase {
+                input: "2 * (5 + 10)",
+                expected: 30,
+            },
+            TestCase {
+                input: "3 * 3 * 3 + 10",
+                expected: 37,
+            },
+            TestCase {
+                input: "3 * (3 * 3) + 10",
+                expected: 37,
+            },
+            TestCase {
+                input: "(5 + 10 * 2 + 15 / 3) * 2 + -10",
+                expected: 50,
             },
         ];
 
