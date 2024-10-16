@@ -1,6 +1,6 @@
 use core::fmt;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum Object {
     Integer(i64),
     Boolean(bool),
@@ -12,6 +12,9 @@ pub enum Object {
 impl Object {
     pub fn is_returned(&self) -> bool {
         matches!(*self, Object::Return(_))
+    }
+    pub fn is_error(&self) -> bool {
+        matches!(*self, Object::Error(_))
     }
 }
 

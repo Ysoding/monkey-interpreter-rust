@@ -1,16 +1,23 @@
+use environment::Environment;
 use object::Object;
 
 use crate::ast::{
-    BlockStatement, Expression, IfExpresion, InfixExpresion, PrefixExpresion, Program, Statement,
+    BlockStatement, Expression, Identifier, IfExpresion, InfixExpresion, PrefixExpresion, Program,
+    Statement,
 };
 
-pub mod object;
+mod environment;
+mod object;
 
-pub struct Evaluator {}
+pub struct Evaluator {
+    environment: Environment,
+}
 
 impl Evaluator {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            environment: Environment::new(),
+        }
     }
 
     pub fn eval_program(&mut self, prog: Program) -> Object {
@@ -26,12 +33,20 @@ impl Evaluator {
             Statement::Return(ret_stmt) => {
                 Object::Return(Box::new(self.eval_expr(ret_stmt.return_value.unwrap())))
             }
+            Statement::Let(let_stmt) => {
+                let obj = self.eval_expr(let_stmt.value.unwrap());
+                if !obj.is_error() {
+                    self.environment.set(&let_stmt.name.value, obj.clone());
+                }
+                obj
+            }
             v => Object::Error(format!("unsupport statement {}", v)),
         }
     }
 
     fn eval_expr(&mut self, expr: Expression) -> Object {
         match expr {
+            Expression::Identifier(v) => self.eval_ident_expr(v),
             Expression::IntegerLiteral(v) => Object::Integer(v.value),
             Expression::Boolean(v) => Object::Boolean(v.value),
             Expression::Prefix(v) => self.eval_prefix_expr(v),
@@ -145,6 +160,13 @@ impl Evaluator {
         }
     }
 
+    fn eval_ident_expr(&mut self, ident: Identifier) -> Object {
+        match self.environment.get(&ident.value) {
+            Some(v) => v,
+            None => Object::Error(format!("identifier not found: {}", ident.value)),
+        }
+    }
+
     fn eval_prefix_expr(&mut self, prefix: PrefixExpresion) -> Object {
         let object = self.eval_expr(*prefix.right.unwrap());
         match prefix.operator.as_str() {
@@ -175,6 +197,33 @@ impl Default for Evaluator {
 mod tests {
     use super::*;
     use crate::{lexer::Lexer, parser::Parser};
+
+    #[test]
+    fn test_error_handling() {
+        let test_cases = vec![("foobar", "identifier not found: foobar")];
+
+        for (input, expected) in test_cases {
+            let evaluated = test_eval(input);
+            match evaluated {
+                Object::Error(ref v) => assert_eq!(expected, v),
+                _ => panic!(""),
+            }
+        }
+    }
+
+    #[test]
+    fn test_let_statements() {
+        let test_cases = vec![
+            ("let a = 5; a;", 5),
+            ("let a = 5 * 5; a;", 25),
+            ("let a = 5; let b = a; b;", 5),
+            ("let a = 5; let b = a; let c = a + b + 5; c;", 15),
+        ];
+
+        for (input, expected) in test_cases {
+            test_integer_object(test_eval(input), expected);
+        }
+    }
 
     #[test]
     fn test_return_stmt() {

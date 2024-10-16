@@ -4,6 +4,8 @@ use crate::{evaluator::Evaluator, lexer::Lexer, parser::Parser};
 
 pub fn start(mut input: impl BufRead, mut output: impl Write) {
     let mut buffer = String::new();
+    let mut eval = Evaluator::new();
+
     loop {
         output.write_all(b">> ").unwrap();
         output.flush().unwrap();
@@ -19,7 +21,6 @@ pub fn start(mut input: impl BufRead, mut output: impl Write) {
             p.errors.clear();
             continue;
         }
-        let mut eval = Evaluator::new();
         let evaluated = eval.eval_program(program);
         writeln!(output, "{}", evaluated).unwrap();
 
