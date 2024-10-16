@@ -63,7 +63,7 @@ impl Evaluator {
             _ => {
                 let stmt = stmts.remove(0);
                 let obj = self.eval_statement(stmt);
-                if obj.is_returned() {
+                if obj.is_returned() || obj.is_error() {
                     obj
                 } else {
                     self.eval_statements(stmts)
@@ -78,7 +78,7 @@ impl Evaluator {
 
     fn eval_if_expr(&mut self, if_expr: IfExpresion) -> Object {
         let obj = self.eval_expr(*if_expr.condition);
-        match self.otb(obj) {
+        match self.otb(obj, "") {
             Ok(v) => {
                 if v {
                     self.eval_block_stmt(if_expr.consequence)
@@ -93,12 +93,16 @@ impl Evaluator {
         }
     }
 
-    fn otb(&mut self, object: Object) -> Result<bool, Object> {
+    fn otb(&mut self, object: Object, operator: &str) -> Result<bool, Object> {
         match object {
             Object::Boolean(i) => Ok(i),
             Object::Integer(v) => Ok(v != 0),
             Object::Error(v) => Err(Object::Error(v)),
-            v => Err(Object::Error(format!("{} is not a bool", v))),
+            v => Err(Object::Error(format!(
+                "unknown operator: {}{}",
+                operator,
+                v.get_type_name()
+            ))),
         }
     }
 
@@ -110,24 +114,24 @@ impl Evaluator {
                 match infix.operator.as_str() {
                     "+" => self.object_add(obj1, obj2),
                     "-" => {
-                        let i1 = self.oti(obj1);
-                        let i2 = self.oti(obj2);
+                        let i1 = self.oti(obj1, "-");
+                        let i2 = self.oti(obj2, "-");
                         match (i1, i2) {
                             (Ok(v1), Ok(v2)) => Object::Integer(v1 - v2),
                             (Err(err), _) | (_, Err(err)) => err,
                         }
                     }
                     "*" => {
-                        let i1 = self.oti(obj1);
-                        let i2 = self.oti(obj2);
+                        let i1 = self.oti(obj1, "*");
+                        let i2 = self.oti(obj2, "*");
                         match (i1, i2) {
                             (Ok(v1), Ok(v2)) => Object::Integer(v1 * v2),
                             (Err(err), _) | (_, Err(err)) => err,
                         }
                     }
                     "/" => {
-                        let i1 = self.oti(obj1);
-                        let i2 = self.oti(obj2);
+                        let i1 = self.oti(obj1, "/");
+                        let i2 = self.oti(obj2, "/");
                         match (i1, i2) {
                             (Ok(v1), Ok(v2)) => Object::Integer(v1 / v2),
                             (Err(err), _) | (_, Err(err)) => err,
@@ -144,11 +148,15 @@ impl Evaluator {
         }
     }
 
-    fn oti(&mut self, object: Object) -> Result<i64, Object> {
+    fn oti(&mut self, object: Object, operator: &str) -> Result<i64, Object> {
         match object {
             Object::Integer(i) => Ok(i),
             Object::Error(v) => Err(Object::Error(v)),
-            v => Err(Object::Error(format!("{} is not an integer", v))),
+            v => Err(Object::Error(format!(
+                "unknown operator: {}{}",
+                operator,
+                v.get_type_name()
+            ))),
         }
     }
 
@@ -156,7 +164,22 @@ impl Evaluator {
         match (obj1, obj2) {
             (Object::Integer(v1), Object::Integer(v2)) => Object::Integer(v1 + v2),
             (Object::Error(v), _) | (_, Object::Error(v)) => Object::Error(v),
-            (x, y) => Object::Error(format!("{:?} and {:?} are not addable", x, y)),
+            (x, y) => {
+                let msg = if x.get_type_name().eq(y.get_type_name()) {
+                    format!(
+                        "unknown operator: {} + {}",
+                        x.get_type_name(),
+                        y.get_type_name()
+                    )
+                } else {
+                    format!(
+                        "type mismatch: {} + {}",
+                        x.get_type_name(),
+                        y.get_type_name()
+                    )
+                };
+                Object::Error(msg)
+            }
         }
     }
 
@@ -170,15 +193,15 @@ impl Evaluator {
     fn eval_prefix_expr(&mut self, prefix: PrefixExpresion) -> Object {
         let object = self.eval_expr(*prefix.right.unwrap());
         match prefix.operator.as_str() {
-            "!" => match self.otb(object) {
+            "!" => match self.otb(object, "!") {
                 Ok(v) => Object::Boolean(!v),
                 Err(err) => err,
             },
-            "-" => match self.oti(object) {
+            "-" => match self.oti(object, "-") {
                 Ok(v) => Object::Integer(-v),
                 Err(err) => err,
             },
-            "+" => match self.oti(object) {
+            "+" => match self.oti(object, "+") {
                 Ok(v) => Object::Integer(v),
                 Err(err) => err,
             },
@@ -200,13 +223,38 @@ mod tests {
 
     #[test]
     fn test_error_handling() {
-        let test_cases = vec![("foobar", "identifier not found: foobar")];
+        let test_cases = vec![
+            ("5 + true;", "type mismatch: Integer + Boolean"),
+            ("5 + true; 5;", "type mismatch: Integer + Boolean"),
+            ("-true", "unknown operator: -Boolean"),
+            ("true + false", "unknown operator: Boolean + Boolean"),
+            ("5; true + false; 5", "unknown operator: Boolean + Boolean"),
+            (
+                "if (10 > 1) { true + false; }",
+                "unknown operator: Boolean + Boolean",
+            ),
+            (
+                "
+            if (10 > 1) {
+            	if (10 > 1) {
+            		return true + false;
+            	}
+
+            	return 1;
+            }
+            ",
+                "unknown operator: Boolean + Boolean",
+            ),
+            ("foobar", "identifier not found: foobar"),
+            // ("\"Hello\" - \"World\"", "unknown operator: String - String"),
+            //     ("1.5 + \"World\"", "unknown operator: Float + String"),
+        ];
 
         for (input, expected) in test_cases {
             let evaluated = test_eval(input);
             match evaluated {
                 Object::Error(ref v) => assert_eq!(expected, v),
-                _ => panic!(""),
+                _ => panic!("invalid expected"),
             }
         }
     }

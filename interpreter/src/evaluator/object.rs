@@ -16,6 +16,16 @@ impl Object {
     pub fn is_error(&self) -> bool {
         matches!(*self, Object::Error(_))
     }
+
+    pub fn get_type_name(&self) -> &str {
+        match self {
+            Object::Integer(_) => "Integer",
+            Object::Boolean(_) => "Boolean",
+            Object::Return(_) => "Return",
+            Object::Error(_) => "Error",
+            Object::Null => "Null",
+        }
+    }
 }
 
 impl fmt::Display for Object {
