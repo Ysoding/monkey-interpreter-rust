@@ -5,7 +5,7 @@ use crate::{
     ast::{
         BlockStatement, BooleanExpression, CallExpression, Expression, ExpressionStatement,
         FunctionLiteral, Identifier, IfExpresion, InfixExpresion, IntegerLiteral, LetStatement,
-        PrefixExpresion, Program, ReturnStatement, Statement,
+        PrefixExpresion, Program, ReturnStatement, Statement, StringLiteral,
     },
     lexer::{
         token::{Token, TokenType},
@@ -55,6 +55,7 @@ impl<'a> Parser<'a> {
         p.register_prefix(TokenType::LParen, Parser::parse_grouped_expression);
         p.register_prefix(TokenType::If, Parser::parse_if_expression);
         p.register_prefix(TokenType::Function, Parser::parse_function_literal);
+        p.register_prefix(TokenType::String, Parser::parse_string_literal);
 
         p.register_infix(TokenType::Plus, Parser::parse_infix_expression);
         p.register_infix(TokenType::Minus, Parser::parse_infix_expression);
@@ -69,6 +70,13 @@ impl<'a> Parser<'a> {
         p.next_token();
         p.next_token();
         p
+    }
+
+    fn parse_string_literal(p: &mut Parser) -> Option<Expression> {
+        Some(Expression::String(StringLiteral {
+            token: p.cur_token.clone(),
+            value: p.cur_token.literal.clone(),
+        }))
     }
 
     fn parse_function_literal(p: &mut Parser) -> Option<Expression> {
@@ -270,7 +278,7 @@ impl<'a> Parser<'a> {
             value: v,
         };
 
-        Some(Expression::IntegerLiteral(ret))
+        Some(Expression::Integer(ret))
     }
 
     fn parse_identifier(p: &mut Parser) -> Option<Expression> {
@@ -413,7 +421,7 @@ impl<'a> Parser<'a> {
         let value = self.parse_expression(Precedence::Lowest);
 
         let sem_tok = TokenType::Semicolon;
-        while !self.cur_token_is(&sem_tok) {
+        while self.peek_token_is(&sem_tok) {
             self.next_token();
         }
 
@@ -457,12 +465,35 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::ast::Node;
     use core::panic;
     use std::{any::Any, fmt::Debug};
 
-    use crate::ast::Node;
+    #[test]
+    fn test_string_literal_expression() {
+        let input = r#""hello world""#;
 
-    use super::*;
+        let mut l = Lexer::new(input.to_string());
+        let mut p = Parser::new(&mut l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        assert_eq!(program.statements.len(), 1);
+        match program.statements[0] {
+            Statement::Expression(ref stmt) => {
+                let expr = stmt.expression.as_ref().unwrap();
+                match expr {
+                    Expression::String(string_literal) => {
+                        assert_eq!("hello world", string_literal.value);
+                    }
+                    _ => panic!("unexpected Expression"),
+                }
+            }
+            _ => panic!("unexpected statement"),
+        }
+    }
+
     #[test]
     fn test_operator_precedence_parsing() {
         struct TestCase {
@@ -1294,7 +1325,7 @@ mod tests {
     }
 
     fn test_integer_literal(expr: &Expression, value: i64) -> bool {
-        if let Expression::IntegerLiteral(integer) = expr {
+        if let Expression::Integer(integer) = expr {
             if integer.token_literal() != format!("{}", value) {
                 eprintln!(
                     "integer.token_literal not {}. got={}",

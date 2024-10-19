@@ -35,6 +35,11 @@ impl Lexer {
             Some(')') => self.new_token(token::TokenType::RParen, ')'),
             Some('{') => self.new_token(token::TokenType::LBrace, '{'),
             Some('}') => self.new_token(token::TokenType::RBrace, '}'),
+            Some('"') => {
+                let literal = self.read_string();
+                let typ = token::TokenType::String;
+                token::Token { typ, literal }
+            }
             Some('=') => {
                 if let Some('=') = self.peek_char() {
                     self.read_char();
@@ -76,6 +81,22 @@ impl Lexer {
 
         self.read_char();
         tok
+    }
+
+    fn read_string(&mut self) -> String {
+        let pos = self.position + 1;
+        loop {
+            self.read_char();
+            match self.ch {
+                Some(v) => {
+                    if v == '"' {
+                        break;
+                    }
+                }
+                None => break,
+            }
+        }
+        self.input[pos..self.position].iter().collect()
     }
 
     fn read_char(&mut self) {
@@ -171,6 +192,8 @@ mod tests {
 
         10 == 10;
         10 != 9;
+        "foobar";
+        "foo bar";
         "#;
 
         let tests = vec![
@@ -253,6 +276,11 @@ mod tests {
             (TokenType::Int, "10"),
             (TokenType::Neq, "!="),
             (TokenType::Int, "9"),
+            (TokenType::Semicolon, ";"),
+            //
+            (TokenType::String, "foobar"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::String, "foo bar"),
             (TokenType::Semicolon, ";"),
             //
             (TokenType::Eof, ""),

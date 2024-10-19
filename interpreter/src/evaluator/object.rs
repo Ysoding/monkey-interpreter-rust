@@ -9,6 +9,7 @@ use super::environment::Environment;
 pub enum Object {
     Integer(i64),
     Boolean(bool),
+    String(String),
     Return(Box<Object>),
     Error(String),
     Function(Vec<Identifier>, BlockStatement, Rc<RefCell<Environment>>),
@@ -16,11 +17,26 @@ pub enum Object {
 }
 
 impl Object {
+    pub fn is_integer(&self) -> bool {
+        matches!(*self, Object::Integer(_))
+    }
+    pub fn is_boolean(&self) -> bool {
+        matches!(*self, Object::Boolean(_))
+    }
+    pub fn is_string(&self) -> bool {
+        matches!(*self, Object::Return(_))
+    }
     pub fn is_returned(&self) -> bool {
         matches!(*self, Object::Return(_))
     }
     pub fn is_error(&self) -> bool {
         matches!(*self, Object::Error(_))
+    }
+    pub fn is_function(&self) -> bool {
+        matches!(*self, Object::Function(_, _, _))
+    }
+    pub fn is_null(&self) -> bool {
+        matches!(*self, Object::Null)
     }
 
     pub fn get_type_name(&self) -> &str {
@@ -31,6 +47,7 @@ impl Object {
             Object::Error(_) => "Error",
             Object::Null => "Null",
             Object::Function(_, _, _) => "Function",
+            Object::String(_) => "String",
         }
     }
 }
@@ -50,6 +67,7 @@ impl fmt::Display for Object {
             Object::Null => write!(f, "null"),
             Object::Error(ref v) => write!(f, "ERROR: {}", v),
             Object::Function(_, _, _) => write!(f, "[function]"),
+            Object::String(ref v) => write!(f, "{}", v),
         }
     }
 }

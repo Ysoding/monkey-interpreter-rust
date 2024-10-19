@@ -59,26 +59,28 @@ impl Node for Statement {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Identifier(Identifier),
-    IntegerLiteral(IntegerLiteral),
+    Integer(IntegerLiteral),
     Prefix(PrefixExpresion),
     Infix(InfixExpresion),
     Boolean(BooleanExpression),
     If(IfExpresion),
     Function(FunctionLiteral),
     Call(CallExpression),
+    String(StringLiteral),
 }
 
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             Expression::Identifier(_) => write!(f, "IdentifierExpression"),
-            Expression::IntegerLiteral(_) => write!(f, "IntegerLiteralExpression"),
+            Expression::Integer(_) => write!(f, "IntegerLiteralExpression"),
             Expression::Prefix(_) => write!(f, "PrefixExpresion"),
             Expression::Infix(_) => write!(f, "InfixExpresion"),
             Expression::Boolean(_) => write!(f, "BooleanExpression"),
             Expression::If(_) => write!(f, "IfExpresion"),
             Expression::Function(_) => write!(f, "FunctionExpression"),
             Expression::Call(_) => write!(f, "CallExpression"),
+            Expression::String(_) => write!(f, "StringLiteral"),
         }
     }
 }
@@ -87,26 +89,28 @@ impl Node for Expression {
     fn token_literal(&self) -> &str {
         match self {
             Expression::Identifier(expr) => expr.token_literal(),
-            Expression::IntegerLiteral(expr) => expr.token_literal(),
+            Expression::Integer(expr) => expr.token_literal(),
             Expression::Prefix(expr) => expr.token_literal(),
             Expression::Infix(expr) => expr.token_literal(),
             Expression::Boolean(expr) => expr.token_literal(),
             Expression::If(expr) => expr.token_literal(),
             Expression::Function(expr) => expr.token_literal(),
             Expression::Call(expr) => expr.token_literal(),
+            Expression::String(expr) => expr.token_literal(),
         }
     }
 
     fn as_string(&self) -> String {
         match self {
             Expression::Identifier(expr) => expr.as_string(),
-            Expression::IntegerLiteral(expr) => expr.as_string(),
+            Expression::Integer(expr) => expr.as_string(),
             Expression::Prefix(expr) => expr.as_string(),
             Expression::Infix(expr) => expr.as_string(),
             Expression::Boolean(expr) => expr.as_string(),
             Expression::If(expr) => expr.as_string(),
             Expression::Function(expr) => expr.as_string(),
             Expression::Call(expr) => expr.as_string(),
+            Expression::String(expr) => expr.as_string(),
         }
     }
 }
@@ -130,6 +134,22 @@ impl Node for Program {
             write!(&mut out, "{}", st.as_string()).unwrap();
         }
         out
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct StringLiteral {
+    pub token: Token,
+    pub value: String,
+}
+
+impl Node for StringLiteral {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+
+    fn as_string(&self) -> String {
+        self.value.clone()
     }
 }
 
@@ -244,13 +264,14 @@ impl Node for ExpressionStatement {
                 let this = &val;
                 match this {
                     Expression::Identifier(expr) => expr.as_string(),
-                    Expression::IntegerLiteral(expr) => expr.as_string(),
+                    Expression::Integer(expr) => expr.as_string(),
                     Expression::Prefix(expr) => expr.as_string(),
                     Expression::Infix(expr) => expr.as_string(),
                     Expression::Boolean(expr) => expr.as_string(),
                     Expression::If(expr) => expr.as_string(),
                     Expression::Function(expr) => expr.as_string(),
                     Expression::Call(expr) => expr.as_string(),
+                    Expression::String(expr) => expr.as_string(),
                 }
             }
         } else {
