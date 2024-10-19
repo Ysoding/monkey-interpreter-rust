@@ -7,6 +7,7 @@ pub trait Node {
     fn as_string(&self) -> String;
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
@@ -55,6 +56,7 @@ impl Node for Statement {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
@@ -131,6 +133,7 @@ impl Node for Program {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct BlockStatement {
     pub token: Token,
     pub statements: Vec<Statement>,
@@ -150,6 +153,7 @@ impl Node for BlockStatement {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct LetStatement {
     pub token: Token,
     pub name: Identifier,
@@ -182,9 +186,10 @@ impl Node for LetStatement {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct Identifier {
     pub token: Token,
-    pub value: String,
+    pub name: String,
 }
 
 impl Node for Identifier {
@@ -193,10 +198,11 @@ impl Node for Identifier {
     }
 
     fn as_string(&self) -> String {
-        self.value.clone()
+        self.name.clone()
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct ReturnStatement {
     pub token: Token,
     pub return_value: Option<Expression>,
@@ -221,6 +227,7 @@ impl Node for ReturnStatement {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct ExpressionStatement {
     pub token: Token,
     pub expression: Option<Expression>,
@@ -252,6 +259,7 @@ impl Node for ExpressionStatement {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct IntegerLiteral {
     pub token: Token,
     pub value: i64,
@@ -267,6 +275,7 @@ impl Node for IntegerLiteral {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct PrefixExpresion {
     pub token: Token,
     pub operator: String,
@@ -291,6 +300,7 @@ impl Node for PrefixExpresion {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct InfixExpresion {
     pub token: Token,
     pub left: Option<Box<Expression>>,
@@ -322,6 +332,7 @@ impl Node for InfixExpresion {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct BooleanExpression {
     pub token: Token,
     pub value: bool,
@@ -337,6 +348,7 @@ impl Node for BooleanExpression {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct IfExpresion {
     pub token: Token,
     pub condition: Box<Expression>,
@@ -368,6 +380,7 @@ impl Node for IfExpresion {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct FunctionLiteral {
     pub token: Token,
     pub parameters: Vec<Identifier>,
@@ -397,6 +410,7 @@ impl Node for FunctionLiteral {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct CallExpression {
     pub token: Token,
     pub function: Box<Expression>,
@@ -438,14 +452,14 @@ mod tests {
                         typ: TokenType::Identifier,
                         literal: "myVar".to_string(),
                     },
-                    value: "myVar".to_string(),
+                    name: "myVar".to_string(),
                 },
                 value: Some(Expression::Identifier(Identifier {
                     token: Token {
                         typ: TokenType::Identifier,
                         literal: "anotherVar".to_string(),
                     },
-                    value: "anotherVar".to_string(),
+                    name: "anotherVar".to_string(),
                 })),
             })],
         };

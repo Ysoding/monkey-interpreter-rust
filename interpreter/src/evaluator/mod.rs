@@ -1,30 +1,37 @@
+use std::{cell::RefCell, rc::Rc};
+
 use environment::Environment;
 use object::Object;
 
 use crate::ast::{
-    BlockStatement, Expression, Identifier, IfExpresion, InfixExpresion, PrefixExpresion, Program,
-    Statement,
+    BlockStatement, CallExpression, Expression, FunctionLiteral, Identifier, IfExpresion,
+    InfixExpresion, PrefixExpresion, Program, Statement,
 };
 
 mod environment;
 mod object;
 
 pub struct Evaluator {
-    environment: Environment,
+    environment: Rc<RefCell<Environment>>,
 }
 
 impl Evaluator {
     pub fn new() -> Self {
         Self {
-            environment: Environment::new(),
+            environment: Rc::new(RefCell::new(Environment::new())),
+        }
+    }
+
+    fn returned(&mut self, obj: Object) -> Object {
+        match obj {
+            Object::Return(v) => *v,
+            o => o,
         }
     }
 
     pub fn eval_program(&mut self, prog: Program) -> Object {
-        match self.eval_statements(prog.statements) {
-            Object::Return(v) => *v,
-            o => o,
-        }
+        let ret = self.eval_statements(prog.statements);
+        self.returned(ret)
     }
 
     fn eval_statement(&mut self, stmt: Statement) -> Object {
@@ -36,7 +43,9 @@ impl Evaluator {
             Statement::Let(let_stmt) => {
                 let obj = self.eval_expr(let_stmt.value.unwrap());
                 if !obj.is_error() {
-                    self.environment.set(&let_stmt.name.value, obj.clone());
+                    self.environment
+                        .borrow_mut()
+                        .set(&let_stmt.name.name, obj.clone());
                 }
                 obj
             }
@@ -52,7 +61,8 @@ impl Evaluator {
             Expression::Prefix(v) => self.eval_prefix_expr(v),
             Expression::Infix(v) => self.eval_infix_expr(v),
             Expression::If(v) => self.eval_if_expr(v),
-            v => Object::Error(format!("unsupport expression {}", v)),
+            Expression::Function(v) => self.eval_fun_expr(v),
+            Expression::Call(v) => self.eval_call_expr(v),
         }
     }
 
@@ -74,6 +84,58 @@ impl Evaluator {
 
     fn eval_block_stmt(&mut self, bstmt: BlockStatement) -> Object {
         self.eval_statements(bstmt.statements)
+    }
+
+    fn eval_call_expr(&mut self, call_expr: CallExpression) -> Object {
+        let fun = self.eval_expr(*call_expr.function);
+        match fun {
+            Object::Function(params, body, f_env) => {
+                self.eval_fn_call(call_expr.arguments, params, body, &f_env)
+            }
+            v => v,
+        }
+    }
+
+    fn eval_fn_call(
+        &mut self,
+        arg_exprs: Vec<Expression>,
+        params: Vec<Identifier>,
+        body: BlockStatement,
+        f_env: &Rc<RefCell<Environment>>,
+    ) -> Object {
+        if arg_exprs.len() != params.len() {
+            Object::Error(format!(
+                "wrong number of arguments: {} expected but got {}",
+                params.len(),
+                arg_exprs.len()
+            ))
+        } else {
+            let args = arg_exprs
+                .into_iter()
+                .map(|e| self.eval_expr(e))
+                .collect::<Vec<_>>();
+            let mut new_env = Environment::new_enclosed(Rc::clone(f_env));
+
+            for (ident, obj) in params.into_iter().zip(args) {
+                new_env.set(&ident.name, obj);
+            }
+
+            let old_env = Rc::clone(&self.environment);
+
+            self.environment = Rc::new(RefCell::new(new_env));
+            let obj = self.eval_block_stmt(body);
+            self.environment = old_env;
+
+            self.returned(obj)
+        }
+    }
+
+    fn eval_fun_expr(&mut self, fun_expr: FunctionLiteral) -> Object {
+        Object::Function(
+            fun_expr.parameters,
+            fun_expr.body,
+            Rc::clone(&self.environment),
+        )
     }
 
     fn eval_if_expr(&mut self, if_expr: IfExpresion) -> Object {
@@ -137,8 +199,22 @@ impl Evaluator {
                             (Err(err), _) | (_, Err(err)) => err,
                         }
                     }
-                    "<" => Object::Boolean(obj1 < obj2),
-                    ">" => Object::Boolean(obj1 > obj2),
+                    "<" => {
+                        let i1 = self.oti(obj1, "<");
+                        let i2 = self.oti(obj2, "<");
+                        match (i1, i2) {
+                            (Ok(v1), Ok(v2)) => Object::Boolean(v1 < v2),
+                            (Err(err), _) | (_, Err(err)) => err,
+                        }
+                    }
+                    ">" => {
+                        let i1 = self.oti(obj1, ">");
+                        let i2 = self.oti(obj2, ">");
+                        match (i1, i2) {
+                            (Ok(v1), Ok(v2)) => Object::Boolean(v1 > v2),
+                            (Err(err), _) | (_, Err(err)) => err,
+                        }
+                    }
                     "==" => Object::Boolean(obj1 == obj2),
                     "!=" => Object::Boolean(obj1 != obj2),
                     _ => Object::Null,
@@ -184,9 +260,9 @@ impl Evaluator {
     }
 
     fn eval_ident_expr(&mut self, ident: Identifier) -> Object {
-        match self.environment.get(&ident.value) {
+        match self.environment.borrow().get(&ident.name) {
             Some(v) => v,
-            None => Object::Error(format!("identifier not found: {}", ident.value)),
+            None => Object::Error(format!("identifier not found: {}", ident.name)),
         }
     }
 
@@ -219,7 +295,52 @@ impl Default for Evaluator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{lexer::Lexer, parser::Parser};
+    use crate::{ast::Node, lexer::Lexer, parser::Parser};
+
+    #[test]
+    fn test_clousures() {
+        let input = "
+let newAddr = fn(x) {
+    fn(y) {x + y};
+};
+
+let addTwo = newAddr(2);
+addTwo(2);
+        ";
+
+        test_integer_object(test_eval(input), 4);
+    }
+
+    #[test]
+    fn test_function_application() {
+        let test_cases = vec![
+            ("let identity = fn(x) { x; }; identity(5);", 5),
+            ("let identity = fn(x) { return x; }; identity(5);", 5),
+            ("let double = fn(x) { x * 2; }; double(5);", 10),
+            ("let add = fn(x, y) { x + y; }; add(5, 5);", 10),
+            ("let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));", 20),
+            ("fn(x) { x; }(5);", 5),
+        ];
+
+        for (input, expected) in test_cases {
+            let evaluated = test_eval(input);
+            test_integer_object(evaluated, expected);
+        }
+    }
+
+    #[test]
+    fn test_function_object() {
+        let input = "fn(x) { x + 2; };";
+        let evaluted = test_eval(input);
+        match evaluted {
+            Object::Function(parms, body, _) => {
+                assert_eq!(1, parms.len());
+                assert_eq!("x", parms.first().unwrap().name);
+                assert_eq!("(x + 2)", body.as_string());
+            }
+            _ => panic!("unexpected object"),
+        }
+    }
 
     #[test]
     fn test_error_handling() {

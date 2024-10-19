@@ -1,11 +1,17 @@
 use core::fmt;
+use std::{cell::RefCell, rc::Rc};
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+use crate::ast::{BlockStatement, Identifier};
+
+use super::environment::Environment;
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     Integer(i64),
     Boolean(bool),
     Return(Box<Object>),
     Error(String),
+    Function(Vec<Identifier>, BlockStatement, Rc<RefCell<Environment>>),
     Null,
 }
 
@@ -24,6 +30,7 @@ impl Object {
             Object::Return(_) => "Return",
             Object::Error(_) => "Error",
             Object::Null => "Null",
+            Object::Function(_, _, _) => "Function",
         }
     }
 }
@@ -42,6 +49,7 @@ impl fmt::Display for Object {
             Object::Return(ref v) => write!(f, "{}", *v),
             Object::Null => write!(f, "null"),
             Object::Error(ref v) => write!(f, "ERROR: {}", v),
+            Object::Function(_, _, _) => write!(f, "[function]"),
         }
     }
 }

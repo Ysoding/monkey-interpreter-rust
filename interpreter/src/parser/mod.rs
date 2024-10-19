@@ -104,7 +104,7 @@ impl<'a> Parser<'a> {
 
         let ident = Identifier {
             token: self.cur_token.clone(),
-            value: self.cur_token.literal.clone(),
+            name: self.cur_token.literal.clone(),
         };
         ret.push(ident);
 
@@ -114,7 +114,7 @@ impl<'a> Parser<'a> {
 
             let ident = Identifier {
                 token: self.cur_token.clone(),
-                value: self.cur_token.literal.clone(),
+                name: self.cur_token.literal.clone(),
             };
             ret.push(ident);
         }
@@ -276,7 +276,7 @@ impl<'a> Parser<'a> {
     fn parse_identifier(p: &mut Parser) -> Option<Expression> {
         Some(Expression::Identifier(Identifier {
             token: p.cur_token.clone(),
-            value: p.cur_token.literal.clone(),
+            name: p.cur_token.literal.clone(),
         }))
     }
 
@@ -383,7 +383,7 @@ impl<'a> Parser<'a> {
         let return_value = self.parse_expression(Precedence::Lowest);
 
         let sem_tok = TokenType::Semicolon;
-        while !self.cur_token_is(&sem_tok) {
+        while self.peek_token_is(&sem_tok) {
             self.next_token();
         }
 
@@ -402,7 +402,7 @@ impl<'a> Parser<'a> {
 
         let name = Identifier {
             token: self.cur_token.clone(),
-            value: self.cur_token.literal.clone(),
+            name: self.cur_token.literal.clone(),
         };
 
         if !self.expect_peek(TokenType::Assign) {
@@ -726,7 +726,7 @@ mod tests {
                     );
 
                     let ps: Vec<String> =
-                        fn_expr.parameters.iter().map(|x| x.value.clone()).collect();
+                        fn_expr.parameters.iter().map(|x| x.name.clone()).collect();
                     assert_eq!(ps, test_case.expected_parapms, "parameters not matched.");
                 } else {
                     panic!("stmt is not ast.PrefixExpresion. got={}", expr);
@@ -1027,11 +1027,11 @@ mod tests {
                     );
 
                     assert_eq!(
-                        fn_expr.parameters[0].value, "x",
+                        fn_expr.parameters[0].name, "x",
                         "first parameter not matched"
                     );
                     assert_eq!(
-                        fn_expr.parameters[1].value, "y",
+                        fn_expr.parameters[1].name, "y",
                         "second paramter not matched",
                     );
 
@@ -1225,10 +1225,10 @@ mod tests {
         }
 
         if let Statement::Let(let_stmt) = s {
-            if let_stmt.name.value != name {
+            if let_stmt.name.name != name {
                 eprintln!(
                     "let_stmt.name.value not '{}'. got={}",
-                    name, let_stmt.name.value
+                    name, let_stmt.name.name
                 );
                 return false;
             }
@@ -1260,8 +1260,8 @@ mod tests {
                 return false;
             }
 
-            if ident.value != value {
-                eprintln!("ident.value not {}. got={}", value, ident.value);
+            if ident.name != value {
+                eprintln!("ident.value not {}. got={}", value, ident.name);
                 return false;
             }
 
