@@ -18,7 +18,7 @@ pub fn start(mut input: impl BufRead, mut output: impl Write) {
         let program = p.parse_program();
         if !p.errors.is_empty() {
             print_parse_errors(&mut output, &p.errors);
-            p.errors.clear();
+            buffer.clear();
             continue;
         }
         let evaluated = eval.eval_program(program);
