@@ -67,6 +67,7 @@ pub enum Expression {
     Function(FunctionLiteral),
     Call(CallExpression),
     String(StringLiteral),
+    Array(ArrayLiteral),
 }
 
 impl fmt::Display for Expression {
@@ -81,6 +82,7 @@ impl fmt::Display for Expression {
             Expression::Function(_) => write!(f, "FunctionExpression"),
             Expression::Call(_) => write!(f, "CallExpression"),
             Expression::String(_) => write!(f, "StringLiteral"),
+            Expression::Array(_) => write!(f, "ArrayLiteral"),
         }
     }
 }
@@ -97,6 +99,7 @@ impl Node for Expression {
             Expression::Function(expr) => expr.token_literal(),
             Expression::Call(expr) => expr.token_literal(),
             Expression::String(expr) => expr.token_literal(),
+            Expression::Array(expr) => expr.token_literal(),
         }
     }
 
@@ -111,6 +114,7 @@ impl Node for Expression {
             Expression::Function(expr) => expr.as_string(),
             Expression::Call(expr) => expr.as_string(),
             Expression::String(expr) => expr.as_string(),
+            Expression::Array(expr) => expr.as_string(),
         }
     }
 }
@@ -131,6 +135,26 @@ impl Node for Program {
     fn as_string(&self) -> String {
         let mut out = String::new();
         for st in &self.statements {
+            write!(&mut out, "{}", st.as_string()).unwrap();
+        }
+        out
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ArrayLiteral {
+    pub token: Token,
+    pub elements: Vec<Expression>,
+}
+
+impl Node for ArrayLiteral {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+
+    fn as_string(&self) -> String {
+        let mut out = String::new();
+        for st in &self.elements {
             write!(&mut out, "{}", st.as_string()).unwrap();
         }
         out
@@ -272,6 +296,7 @@ impl Node for ExpressionStatement {
                     Expression::Function(expr) => expr.as_string(),
                     Expression::Call(expr) => expr.as_string(),
                     Expression::String(expr) => expr.as_string(),
+                    Expression::Array(expr) => expr.as_string(),
                 }
             }
         } else {

@@ -3,9 +3,10 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        BlockStatement, BooleanExpression, CallExpression, Expression, ExpressionStatement,
-        FunctionLiteral, Identifier, IfExpresion, InfixExpresion, IntegerLiteral, LetStatement,
-        PrefixExpresion, Program, ReturnStatement, Statement, StringLiteral,
+        ArrayLiteral, BlockStatement, BooleanExpression, CallExpression, Expression,
+        ExpressionStatement, FunctionLiteral, Identifier, IfExpresion, InfixExpresion,
+        IntegerLiteral, LetStatement, PrefixExpresion, Program, ReturnStatement, Statement,
+        StringLiteral,
     },
     lexer::{
         token::{Token, TokenType},
@@ -56,6 +57,7 @@ impl<'a> Parser<'a> {
         p.register_prefix(TokenType::If, Parser::parse_if_expression);
         p.register_prefix(TokenType::Function, Parser::parse_function_literal);
         p.register_prefix(TokenType::String, Parser::parse_string_literal);
+        p.register_prefix(TokenType::LBracket, Parser::parse_array_literal);
 
         p.register_infix(TokenType::Plus, Parser::parse_infix_expression);
         p.register_infix(TokenType::Minus, Parser::parse_infix_expression);
@@ -70,6 +72,42 @@ impl<'a> Parser<'a> {
         p.next_token();
         p.next_token();
         p
+    }
+
+    fn parse_array_literal(p: &mut Parser) -> Option<Expression> {
+        Some(Expression::Array(ArrayLiteral {
+            token: p.cur_token.clone(),
+            elements: p.parse_expression_list(TokenType::RBracket),
+        }))
+    }
+
+    fn parse_expression_list(&mut self, end: TokenType) -> Vec<Expression> {
+        let mut eles = Vec::new();
+
+        if self.peek_token_is(&end) {
+            self.next_token();
+            return eles;
+        }
+
+        self.next_token();
+        if let Some(v) = self.parse_expression(Precedence::Lowest) {
+            eles.push(v);
+        }
+
+        while self.peek_token_is(&TokenType::Comma) {
+            self.next_token();
+            self.next_token();
+
+            if let Some(v) = self.parse_expression(Precedence::Lowest) {
+                eles.push(v);
+            }
+        }
+
+        if !self.expect_peek(end) {
+            return vec![];
+        }
+
+        eles
     }
 
     fn parse_string_literal(p: &mut Parser) -> Option<Expression> {
@@ -208,35 +246,12 @@ impl<'a> Parser<'a> {
 
     fn parse_call_expression(p: &mut Parser, function: Expression) -> Option<Expression> {
         let token = p.cur_token.clone();
-        let arguments = p.parse_call_arguments();
+        let arguments = p.parse_expression_list(TokenType::RParen);
         Some(Expression::Call(CallExpression {
             token,
             function: Box::new(function),
             arguments,
         }))
-    }
-
-    fn parse_call_arguments(&mut self) -> Vec<Expression> {
-        let mut ret: Vec<Expression> = Vec::new();
-
-        if self.peek_token_is(&TokenType::RParen) {
-            self.next_token();
-            return ret;
-        }
-
-        self.next_token();
-        ret.push(self.parse_expression(Precedence::Lowest).unwrap());
-
-        while self.peek_token_is(&TokenType::Comma) {
-            self.next_token();
-            self.next_token();
-            ret.push(self.parse_expression(Precedence::Lowest).unwrap());
-        }
-
-        if !self.expect_peek(TokenType::RParen) {
-            panic!("expected `)`");
-        }
-        ret
     }
 
     fn parse_infix_expression(p: &mut Parser, left: Expression) -> Option<Expression> {
@@ -469,6 +484,44 @@ mod tests {
     use crate::ast::Node;
     use core::panic;
     use std::{any::Any, fmt::Debug};
+
+    #[test]
+    fn test_array_literal_expression() {
+        let input = r#"[1, 2 * 2, 3 + 3]"#;
+
+        let mut l = Lexer::new(input.to_string());
+        let mut p = Parser::new(&mut l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        assert_eq!(program.statements.len(), 1);
+        match program.statements[0] {
+            Statement::Expression(ref stmt) => {
+                let expr = stmt.expression.as_ref().unwrap();
+                match expr {
+                    Expression::Array(array_literal) => {
+                        assert_eq!(3, array_literal.elements.len());
+                        test_integer_literal(&array_literal.elements[0], 1);
+                        assert!(test_infix_expressions(
+                            &array_literal.elements[1],
+                            2,
+                            "*",
+                            2
+                        ));
+                        assert!(test_infix_expressions(
+                            &array_literal.elements[2],
+                            3,
+                            "+",
+                            3
+                        ));
+                    }
+
+                    _ => panic!("unexpected Expression"),
+                }
+            }
+            _ => panic!("unexpected statement"),
+        }
+    }
 
     #[test]
     fn test_string_literal_expression() {
@@ -1083,7 +1136,7 @@ mod tests {
                         .expression
                         .as_ref()
                         .expect("Expression should not be None");
-                    test_infix_expressions(body_expr, "x", "+", "y");
+                    assert!(test_infix_expressions(body_expr, "x", "+", "y"));
                 }
 
                 _ => panic!("Expected FunctionExpression"),
@@ -1298,7 +1351,7 @@ mod tests {
 
             true
         } else {
-            eprintln!("expr not ast.IntegerLiteral. got={}", expr);
+            eprintln!("expr not ast.Identifier . got={}", expr);
             false
         }
     }

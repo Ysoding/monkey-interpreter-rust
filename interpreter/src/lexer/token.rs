@@ -31,6 +31,8 @@ pub enum TokenType {
     Else,
     Return,
     String,
+    LBracket,
+    RBracket,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
