@@ -1,13 +1,14 @@
 use std::{cell::RefCell, rc::Rc};
 
 use environment::Environment;
-use object::Object;
+use object::{BuiltinFunction, Object};
 
 use crate::ast::{
     BlockStatement, CallExpression, Expression, FunctionLiteral, Identifier, IfExpresion,
     InfixExpresion, PrefixExpresion, Program, Statement, StringLiteral,
 };
 
+mod builtins;
 mod environment;
 mod object;
 
@@ -97,7 +98,30 @@ impl Evaluator {
             Object::Function(params, body, f_env) => {
                 self.eval_fn_call(call_expr.arguments, params, body, &f_env)
             }
+            Object::Builtin(_, params_len, func) => {
+                self.eval_builtin_fn(call_expr.arguments, params_len, func)
+            }
             v => v,
+        }
+    }
+    fn eval_builtin_fn(
+        &mut self,
+        arg_exprs: Vec<Expression>,
+        params_len: usize,
+        bfn: BuiltinFunction,
+    ) -> Object {
+        if arg_exprs.len() != params_len {
+            Object::Error(format!(
+                "wrong number of arguments: {} expected but got {}",
+                params_len,
+                arg_exprs.len()
+            ))
+        } else {
+            let args = arg_exprs
+                .into_iter()
+                .map(|e| self.eval_expr(e))
+                .collect::<Vec<_>>();
+            bfn(args)
         }
     }
 
@@ -323,6 +347,28 @@ impl Default for Evaluator {
 mod tests {
     use super::*;
     use crate::{ast::Node, lexer::Lexer, parser::Parser};
+
+    #[test]
+    fn test_builtin_functions() {
+        let test_cases = vec![
+            (r#"len("")"#, Object::Integer(0)),
+            (r#"len("four")"#, Object::Integer(4)),
+            (r#"len("hello world")"#, Object::Integer(11)),
+            (
+                r#"len(1)"#,
+                Object::Error("argument to `len` not supported, got Integer".to_string()),
+            ),
+            (
+                r#"len("one", "two")"#,
+                Object::Error("wrong number of arguments: 1 expected but got 2".to_string()),
+            ),
+        ];
+
+        for (input, expected) in test_cases {
+            let evaluated = test_eval(input);
+            assert_eq!(evaluated, expected);
+        }
+    }
 
     #[test]
     fn test_string_concatenation() {

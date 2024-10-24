@@ -13,8 +13,11 @@ pub enum Object {
     Return(Box<Object>),
     Error(String),
     Function(Vec<Identifier>, BlockStatement, Rc<RefCell<Environment>>),
+    Builtin(String, usize, BuiltinFunction),
     Null,
 }
+
+pub type BuiltinFunction = fn(Vec<Object>) -> Object;
 
 impl Object {
     pub fn is_integer(&self) -> bool {
@@ -48,6 +51,7 @@ impl Object {
             Object::Null => "Null",
             Object::Function(_, _, _) => "Function",
             Object::String(_) => "String",
+            Object::Builtin(_, _, _) => "Builtin",
         }
     }
 }
@@ -68,6 +72,7 @@ impl fmt::Display for Object {
             Object::Error(ref v) => write!(f, "ERROR: {}", v),
             Object::Function(_, _, _) => write!(f, "[function]"),
             Object::String(ref v) => write!(f, "{}", v),
+            Object::Builtin(ref name, _, _) => write!(f, "[buitlin function: {}]", name),
         }
     }
 }
