@@ -14,6 +14,7 @@ pub enum Object {
     Error(String),
     Function(Vec<Identifier>, BlockStatement, Rc<RefCell<Environment>>),
     Builtin(String, usize, BuiltinFunction),
+    Array(Vec<Object>),
     Null,
 }
 
@@ -52,6 +53,7 @@ impl Object {
             Object::Function(_, _, _) => "Function",
             Object::String(_) => "String",
             Object::Builtin(_, _, _) => "Builtin",
+            Object::Array(_) => "Array",
         }
     }
 }
@@ -73,6 +75,18 @@ impl fmt::Display for Object {
             Object::Function(_, _, _) => write!(f, "[function]"),
             Object::String(ref v) => write!(f, "{}", v),
             Object::Builtin(ref name, _, _) => write!(f, "[buitlin function: {}]", name),
+            Object::Array(ref v) => {
+                let mut out = String::new();
+                out.push('[');
+                for (i, o) in v.iter().enumerate() {
+                    out.push_str(format!("{}", o).as_str());
+                    if i < v.len() - 1 {
+                        out.push_str(", ");
+                    }
+                }
+                out.push(']');
+                write!(f, "{}", out)
+            }
         }
     }
 }

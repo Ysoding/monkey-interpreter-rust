@@ -4,8 +4,9 @@ use environment::Environment;
 use object::{BuiltinFunction, Object};
 
 use crate::ast::{
-    BlockStatement, CallExpression, Expression, FunctionLiteral, Identifier, IfExpresion,
-    InfixExpresion, PrefixExpresion, Program, Statement, StringLiteral,
+    ArrayLiteral, BlockStatement, CallExpression, Expression, FunctionLiteral, Identifier,
+    IfExpresion, IndexExpression, InfixExpresion, PrefixExpresion, Program, Statement,
+    StringLiteral,
 };
 
 mod builtins;
@@ -65,8 +66,8 @@ impl Evaluator {
             Expression::Function(v) => self.eval_fun_expr(v),
             Expression::Call(v) => self.eval_call_expr(v),
             Expression::String(v) => self.eval_string_literal_expr(v),
-            Expression::Array(_) => todo!(),
-            Expression::Index(_) => todo!(),
+            Expression::Array(v) => self.eval_array_literal_expr(v),
+            Expression::Index(v) => self.eval_array_index_expr(v),
         }
     }
 
@@ -88,6 +89,28 @@ impl Evaluator {
 
     fn eval_block_stmt(&mut self, bstmt: BlockStatement) -> Object {
         self.eval_statements(bstmt.statements)
+    }
+
+    fn eval_array_index_expr(&mut self, expr: IndexExpression) -> Object {
+        let left = self.eval_expr(*expr.left);
+        let index = self.eval_expr(*expr.index);
+        match left {
+            Object::Array(arr) => match self.oti(&index) {
+                Ok(idx) => arr.into_iter().nth(idx as usize).unwrap_or(Object::Null),
+                Err(err) => err,
+            },
+            o => Object::Error(format!("index operator not supported: {}", o)),
+        }
+    }
+
+    fn eval_array_literal_expr(&mut self, expr: ArrayLiteral) -> Object {
+        let v: Vec<Object> = expr
+            .elements
+            .into_iter()
+            .map(|e| self.eval_expr(e))
+            .collect();
+
+        Object::Array(v)
     }
 
     fn eval_string_literal_expr(&mut self, expr: StringLiteral) -> Object {
@@ -351,8 +374,51 @@ mod tests {
     use crate::{ast::Node, lexer::Lexer, parser::Parser};
 
     #[test]
+    fn test_array_index_expression() {
+        let test_cases = vec![
+            ("[1, 2, 3][0]", Object::Integer(1)),
+            ("[1, 2, 3][1]", Object::Integer(2)),
+            ("[1, 2, 3][2]", Object::Integer(3)),
+            ("let i = 0; [1][i];", Object::Integer(1)),
+            ("[1, 2, 3][1 + 1];", Object::Integer(3)),
+            ("let myArray = [1, 2, 3]; myArray[2];", Object::Integer(3)),
+            (
+                "let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];",
+                Object::Integer(6),
+            ),
+            (
+                "let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i]",
+                Object::Integer(2),
+            ),
+            ("[1, 2, 3][3]", Object::Null),
+            ("[1, 2, 3][-1]", Object::Null),
+        ];
+
+        for (input, expected) in test_cases {
+            let evaluated = test_eval(input);
+            assert_eq!(evaluated, expected);
+        }
+    }
+
+    #[test]
+    fn test_array_literals() {
+        let input = "[1, 2 * 2, 3 + 3]";
+        let evaluated = test_eval(input);
+        match evaluated {
+            Object::Array(v) => {
+                assert_eq!(v.len(), 3);
+                test_integer_object(&v[0], 1);
+                test_integer_object(&v[1], 4);
+                test_integer_object(&v[2], 6);
+            }
+            _ => panic!("unexpected Object {}", evaluated.get_type_name()),
+        }
+    }
+
+    #[test]
     fn test_builtin_functions() {
         let test_cases = vec![
+            // len for strings
             (r#"len("")"#, Object::Integer(0)),
             (r#"len("four")"#, Object::Integer(4)),
             (r#"len("hello world")"#, Object::Integer(11)),
@@ -363,6 +429,55 @@ mod tests {
             (
                 r#"len("one", "two")"#,
                 Object::Error("wrong number of arguments: 1 expected but got 2".to_string()),
+            ),
+            // len for arrays
+            ("len([])", Object::Integer(0)),
+            ("len([1])", Object::Integer(1)),
+            ("len([1, 1 + 2 * 3, true])", Object::Integer(3)),
+            // first for arrays
+            ("first([])", Object::Null),
+            ("first([1])", Object::Integer(1)),
+            ("first([1, 2])", Object::Integer(1)),
+            (
+                "first(1)",
+                Object::Error("argument to `first` must be Array, got Integer".to_string()),
+            ),
+            // last for arrays
+            ("last([])", Object::Null),
+            ("last([1])", Object::Integer(1)),
+            ("last([1, 2])", Object::Integer(2)),
+            (
+                "last(1)",
+                Object::Error("argument to `last` must be Array, got Integer".to_string()),
+            ),
+            // rest for arrays
+            ("rest([])", Object::Null),
+            ("rest([1])", Object::Array(vec![])),
+            (
+                "rest([1, 2, 3])",
+                Object::Array(vec![Object::Integer(2), Object::Integer(3)]),
+            ),
+            (
+                "rest(1)",
+                Object::Error("argument to `rest` must be Array, got Integer".to_string()),
+            ),
+            // push for arrays
+            ("push([], 1)", Object::Array(vec![Object::Integer(1)])),
+            (
+                "push([1, 2], 3)",
+                Object::Array(vec![
+                    Object::Integer(1),
+                    Object::Integer(2),
+                    Object::Integer(3),
+                ]),
+            ),
+            (
+                "push([])",
+                Object::Error("wrong number of arguments: 2 expected but got 1".to_string()),
+            ),
+            (
+                "push(1, 2)",
+                Object::Error("first argument to `push` must be Array, got Integer".to_string()),
             ),
         ];
 
@@ -405,7 +520,7 @@ let addTwo = newAddr(2);
 addTwo(2);
         ";
 
-        test_integer_object(test_eval(input), 4);
+        test_integer_object(&test_eval(input), 4);
     }
 
     #[test]
@@ -421,7 +536,7 @@ addTwo(2);
 
         for (input, expected) in test_cases {
             let evaluated = test_eval(input);
-            test_integer_object(evaluated, expected);
+            test_integer_object(&evaluated, expected);
         }
     }
 
@@ -487,7 +602,7 @@ addTwo(2);
         ];
 
         for (input, expected) in test_cases {
-            test_integer_object(test_eval(input), expected);
+            test_integer_object(&test_eval(input), expected);
         }
     }
 
@@ -785,7 +900,7 @@ addTwo(2);
 
         for case in cases {
             let evaluated = test_eval(case.input);
-            test_integer_object(evaluated, case.expected);
+            test_integer_object(&evaluated, case.expected);
         }
     }
 
@@ -796,9 +911,9 @@ addTwo(2);
         }
     }
 
-    fn test_integer_object(evaluated: Object, expected: i64) {
+    fn test_integer_object(evaluated: &Object, expected: i64) {
         match evaluated {
-            Object::Integer(v) => assert_eq!(v, expected),
+            Object::Integer(v) => assert_eq!(*v, expected),
             _ => panic!("invalid object {}, need Integer", evaluated),
         }
     }
