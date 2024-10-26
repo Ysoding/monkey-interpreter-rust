@@ -68,6 +68,7 @@ pub enum Expression {
     Call(CallExpression),
     String(StringLiteral),
     Array(ArrayLiteral),
+    Index(IndexExpression),
 }
 
 impl fmt::Display for Expression {
@@ -83,6 +84,7 @@ impl fmt::Display for Expression {
             Expression::Call(_) => write!(f, "CallExpression"),
             Expression::String(_) => write!(f, "StringLiteral"),
             Expression::Array(_) => write!(f, "ArrayLiteral"),
+            Expression::Index(_) => write!(f, "IndexExpression"),
         }
     }
 }
@@ -100,6 +102,7 @@ impl Node for Expression {
             Expression::Call(expr) => expr.token_literal(),
             Expression::String(expr) => expr.token_literal(),
             Expression::Array(expr) => expr.token_literal(),
+            Expression::Index(expr) => expr.token_literal(),
         }
     }
 
@@ -115,6 +118,7 @@ impl Node for Expression {
             Expression::Call(expr) => expr.as_string(),
             Expression::String(expr) => expr.as_string(),
             Expression::Array(expr) => expr.as_string(),
+            Expression::Index(expr) => expr.as_string(),
         }
     }
 }
@@ -140,6 +144,30 @@ impl Node for Program {
         out
     }
 }
+#[derive(Debug, PartialEq, Clone)]
+pub struct IndexExpression {
+    pub token: Token,
+    pub left: Box<Expression>,
+    pub index: Box<Expression>,
+}
+
+impl Node for IndexExpression {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+
+    fn as_string(&self) -> String {
+        let mut out = String::new();
+        out.write_char('(').unwrap();
+        write!(&mut out, "{}", self.left.as_string()).unwrap();
+        out.write_char('[').unwrap();
+        write!(&mut out, "{}", self.index.as_string()).unwrap();
+        out.write_char(']').unwrap();
+        out.write_char(')').unwrap();
+
+        out
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ArrayLiteral {
@@ -154,9 +182,15 @@ impl Node for ArrayLiteral {
 
     fn as_string(&self) -> String {
         let mut out = String::new();
-        for st in &self.elements {
-            write!(&mut out, "{}", st.as_string()).unwrap();
+        out.write_char('[').unwrap();
+        for i in 0..self.elements.len() {
+            if i != self.elements.len() - 1 {
+                write!(&mut out, "{}, ", self.elements[i].as_string()).unwrap();
+            } else {
+                write!(&mut out, "{}", self.elements[i].as_string()).unwrap();
+            }
         }
+        out.write_char(']').unwrap();
         out
     }
 }
@@ -297,6 +331,7 @@ impl Node for ExpressionStatement {
                     Expression::Call(expr) => expr.as_string(),
                     Expression::String(expr) => expr.as_string(),
                     Expression::Array(expr) => expr.as_string(),
+                    Expression::Index(expr) => expr.as_string(),
                 }
             }
         } else {

@@ -66,6 +66,7 @@ impl Evaluator {
             Expression::Call(v) => self.eval_call_expr(v),
             Expression::String(v) => self.eval_string_literal_expr(v),
             Expression::Array(_) => todo!(),
+            Expression::Index(_) => todo!(),
         }
     }
 

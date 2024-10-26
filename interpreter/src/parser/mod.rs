@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use crate::{
     ast::{
         ArrayLiteral, BlockStatement, BooleanExpression, CallExpression, Expression,
-        ExpressionStatement, FunctionLiteral, Identifier, IfExpresion, InfixExpresion,
-        IntegerLiteral, LetStatement, PrefixExpresion, Program, ReturnStatement, Statement,
-        StringLiteral,
+        ExpressionStatement, FunctionLiteral, Identifier, IfExpresion, IndexExpression,
+        InfixExpresion, IntegerLiteral, LetStatement, PrefixExpresion, Program, ReturnStatement,
+        Statement, StringLiteral,
     },
     lexer::{
         token::{Token, TokenType},
@@ -26,6 +26,7 @@ pub enum Precedence {
     Product,     // *
     Prefix,      // -X or !X
     Call,        // myFunction(X)
+    Index,       // array[index]
 }
 
 pub struct Parser<'a> {
@@ -68,6 +69,7 @@ impl<'a> Parser<'a> {
         p.register_infix(TokenType::Lt, Parser::parse_infix_expression);
         p.register_infix(TokenType::Gt, Parser::parse_infix_expression);
         p.register_infix(TokenType::LParen, Parser::parse_call_expression);
+        p.register_infix(TokenType::LBracket, Parser::parse_index_expression);
 
         p.next_token();
         p.next_token();
@@ -244,6 +246,23 @@ impl<'a> Parser<'a> {
         Some(Expression::Boolean(ret))
     }
 
+    fn parse_index_expression(p: &mut Parser, left: Expression) -> Option<Expression> {
+        let token = p.cur_token.clone();
+
+        p.next_token();
+        let index = p.parse_expression(Precedence::Lowest)?;
+
+        if !p.expect_peek(TokenType::RBracket) {
+            return None;
+        }
+
+        Some(Expression::Index(IndexExpression {
+            token,
+            index: Box::new(index),
+            left: Box::new(left),
+        }))
+    }
+
     fn parse_call_expression(p: &mut Parser, function: Expression) -> Option<Expression> {
         let token = p.cur_token.clone();
         let arguments = p.parse_expression_list(TokenType::RParen);
@@ -343,6 +362,7 @@ impl<'a> Parser<'a> {
             TokenType::Asterisk => Precedence::Product,
             TokenType::Slash => Precedence::Product,
             TokenType::LParen => Precedence::Call,
+            TokenType::LBracket => Precedence::Index,
             _ => Precedence::Lowest,
         }
     }
@@ -484,6 +504,32 @@ mod tests {
     use crate::ast::Node;
     use core::panic;
     use std::{any::Any, fmt::Debug};
+
+    #[test]
+    fn test_index_expression() {
+        let input = r#"myArray[1 + 1]"#;
+
+        let mut l = Lexer::new(input.to_string());
+        let mut p = Parser::new(&mut l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        assert_eq!(program.statements.len(), 1);
+
+        match &program.statements[0] {
+            Statement::Expression(stmt) => {
+                let expr = stmt.expression.as_ref().unwrap();
+                match expr {
+                    Expression::Index(index_expression) => {
+                        assert!(test_identifier(&index_expression.left, "myArray"));
+                        assert!(test_infix_expressions(&index_expression.index, 1, "+", 1))
+                    }
+                    _ => panic!("unexpected ExpressionStatement"),
+                }
+            }
+            _ => panic!("unexpected Statement"),
+        }
+    }
 
     #[test]
     fn test_array_literal_expression() {
@@ -649,6 +695,14 @@ mod tests {
             TestCase {
                 input: "add(a + b + c * d / f + g)",
                 expected: "add((((a + b) + ((c * d) / f)) + g))",
+            },
+            TestCase {
+                input: "a * [1, 2, 3, 4][b * c] * d",
+                expected: "((a * ([1, 2, 3, 4][(b * c)])) * d)",
+            },
+            TestCase {
+                input: "add(a * b[2], b[1], 2 * [1, 2][1])",
+                expected: "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))",
             },
         ];
 
