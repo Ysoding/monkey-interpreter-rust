@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use crate::{
     ast::{
         ArrayLiteral, BlockStatement, BooleanExpression, CallExpression, Expression,
-        ExpressionStatement, FunctionLiteral, Identifier, IfExpresion, IndexExpression,
-        InfixExpresion, IntegerLiteral, LetStatement, PrefixExpresion, Program, ReturnStatement,
-        Statement, StringLiteral,
+        ExpressionStatement, FunctionLiteral, HashLiteral, Identifier, IfExpresion,
+        IndexExpression, InfixExpresion, IntegerLiteral, LetStatement, PrefixExpresion, Program,
+        ReturnStatement, Statement, StringLiteral,
     },
     lexer::{
         token::{Token, TokenType},
@@ -59,6 +59,7 @@ impl<'a> Parser<'a> {
         p.register_prefix(TokenType::Function, Parser::parse_function_literal);
         p.register_prefix(TokenType::String, Parser::parse_string_literal);
         p.register_prefix(TokenType::LBracket, Parser::parse_array_literal);
+        p.register_prefix(TokenType::LBrace, Parser::parse_hash_literal);
 
         p.register_infix(TokenType::Plus, Parser::parse_infix_expression);
         p.register_infix(TokenType::Minus, Parser::parse_infix_expression);
@@ -74,6 +75,35 @@ impl<'a> Parser<'a> {
         p.next_token();
         p.next_token();
         p
+    }
+
+    fn parse_hash_literal(p: &mut Parser) -> Option<Expression> {
+        let mut res = HashLiteral {
+            token: p.cur_token.clone(),
+            pairs: vec![],
+        };
+
+        while !p.peek_token_is(&TokenType::RBrace) {
+            p.next_token();
+            let key = p.parse_expression(Precedence::Lowest)?;
+
+            if !p.expect_peek(TokenType::COLON) {
+                return None;
+            }
+            p.next_token();
+            let value = p.parse_expression(Precedence::Lowest)?;
+            res.pairs.push((key, value));
+
+            if !p.peek_token_is(&TokenType::RBrace) && !p.expect_peek(TokenType::Comma) {
+                return None;
+            }
+        }
+
+        if !p.expect_peek(TokenType::RBrace) {
+            return None;
+        }
+
+        Some(Expression::Hash(res))
     }
 
     fn parse_array_literal(p: &mut Parser) -> Option<Expression> {
@@ -504,6 +534,127 @@ mod tests {
     use crate::ast::Node;
     use core::panic;
     use std::{any::Any, fmt::Debug};
+
+    #[test]
+    fn test_hash_literal_empty() {
+        let input = r#"{}"#;
+
+        let mut l = Lexer::new(input.to_string());
+        let mut p = Parser::new(&mut l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        assert_eq!(program.statements.len(), 1);
+
+        match &program.statements[0] {
+            Statement::Expression(stmt) => {
+                let expr = stmt.expression.as_ref().unwrap();
+                match expr {
+                    Expression::Hash(hash_expr) => {
+                        assert_eq!(0, hash_expr.pairs.len());
+                    }
+                    _ => panic!("unexpected ExpressionStatement"),
+                }
+            }
+            _ => panic!("unexpected Statement"),
+        }
+    }
+
+    #[test]
+    fn test_hash_literal_expression_with_expression() {
+        let input = r#"{"one": 0 + 1, "two": 10 - 8, "three": 15 / 5}"#;
+
+        let mut l = Lexer::new(input.to_string());
+        let mut p = Parser::new(&mut l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let mut expected: HashMap<String, Box<dyn Fn(&Expression)>> = HashMap::new();
+
+        expected.insert(
+            "one".to_string(),
+            Box::new(|expr: &Expression| {
+                assert!(test_infix_expressions(expr, 0, "+", 1));
+            }),
+        );
+
+        expected.insert(
+            "two".to_string(),
+            Box::new(|expr: &Expression| {
+                assert!(test_infix_expressions(expr, 10, "-", 8));
+            }),
+        );
+
+        expected.insert(
+            "three".to_string(),
+            Box::new(|expr: &Expression| {
+                assert!(test_infix_expressions(expr, 15, "/", 5));
+            }),
+        );
+
+        match &program.statements[0] {
+            Statement::Expression(stmt) => {
+                let expr = stmt.expression.as_ref().unwrap();
+                match expr {
+                    Expression::Hash(hash_expr) => {
+                        assert_eq!(3, hash_expr.pairs.len());
+                        for (k, v) in &hash_expr.pairs {
+                            match k {
+                                Expression::String(sl) => {
+                                    let test_fn = expected.get(&sl.value).unwrap();
+                                    test_fn(v);
+                                }
+                                _ => panic!("unexpected key type"),
+                            }
+                        }
+                    }
+                    _ => panic!("unexpected ExpressionStatement"),
+                }
+            }
+            _ => panic!("unexpected Statement"),
+        }
+    }
+
+    #[test]
+    fn test_hash_literal_expression() {
+        let input = r#"{"one": 1, "two": 2, "three": 3}"#;
+
+        let mut l = Lexer::new(input.to_string());
+        let mut p = Parser::new(&mut l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let mut expected = HashMap::new();
+        expected.insert("one".to_string(), 1);
+        expected.insert("two".to_string(), 2);
+        expected.insert("three".to_string(), 3);
+
+        match &program.statements[0] {
+            Statement::Expression(stmt) => {
+                let expr = stmt.expression.as_ref().unwrap();
+                match expr {
+                    Expression::Hash(hash_expr) => {
+                        assert_eq!(3, hash_expr.pairs.len());
+                        for (k, v) in &hash_expr.pairs {
+                            match k {
+                                Expression::String(sl) => {
+                                    let expected_value = *expected.get(&sl.value).unwrap();
+                                    assert!(test_integer_literal(v, expected_value as i64));
+                                }
+                                _ => panic!("unexpected key type"),
+                            }
+                        }
+                    }
+                    _ => panic!("unexpected ExpressionStatement"),
+                }
+            }
+            _ => panic!("unexpected Statement"),
+        }
+    }
 
     #[test]
     fn test_index_expression() {

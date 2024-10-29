@@ -37,6 +37,7 @@ impl Lexer {
             Some('}') => self.new_token(token::TokenType::RBrace, '}'),
             Some('[') => self.new_token(token::TokenType::LBracket, '['),
             Some(']') => self.new_token(token::TokenType::RBracket, ']'),
+            Some(':') => self.new_token(token::TokenType::COLON, ':'),
             Some('"') => {
                 let literal = self.read_string();
                 let typ = token::TokenType::String;
@@ -197,6 +198,7 @@ mod tests {
         "foobar";
         "foo bar";
         [1, 2];
+        {"foo": "bar"};
         "#;
 
         let tests = vec![
@@ -291,6 +293,13 @@ mod tests {
             (TokenType::Comma, ","),
             (TokenType::Int, "2"),
             (TokenType::RBracket, "]"),
+            (TokenType::Semicolon, ";"),
+            //
+            (TokenType::LBrace, "{"),
+            (TokenType::String, "foo"),
+            (TokenType::COLON, ":"),
+            (TokenType::String, "bar"),
+            (TokenType::RBrace, "}"),
             (TokenType::Semicolon, ";"),
             //
             (TokenType::Eof, ""),

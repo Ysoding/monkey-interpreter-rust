@@ -69,6 +69,7 @@ pub enum Expression {
     String(StringLiteral),
     Array(ArrayLiteral),
     Index(IndexExpression),
+    Hash(HashLiteral),
 }
 
 impl fmt::Display for Expression {
@@ -85,6 +86,7 @@ impl fmt::Display for Expression {
             Expression::String(_) => write!(f, "StringLiteral"),
             Expression::Array(_) => write!(f, "ArrayLiteral"),
             Expression::Index(_) => write!(f, "IndexExpression"),
+            Expression::Hash(_) => write!(f, "HashLiteral"),
         }
     }
 }
@@ -103,6 +105,7 @@ impl Node for Expression {
             Expression::String(expr) => expr.token_literal(),
             Expression::Array(expr) => expr.token_literal(),
             Expression::Index(expr) => expr.token_literal(),
+            Expression::Hash(expr) => expr.token_literal(),
         }
     }
 
@@ -119,6 +122,7 @@ impl Node for Expression {
             Expression::String(expr) => expr.as_string(),
             Expression::Array(expr) => expr.as_string(),
             Expression::Index(expr) => expr.as_string(),
+            Expression::Hash(expr) => expr.as_string(),
         }
     }
 }
@@ -144,6 +148,34 @@ impl Node for Program {
         out
     }
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct HashLiteral {
+    pub token: Token,
+    pub pairs: Vec<(Expression, Expression)>,
+}
+
+impl Node for HashLiteral {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+
+    fn as_string(&self) -> String {
+        let mut out = String::new();
+
+        out.write_char('{').unwrap();
+        for (i, (k, v)) in self.pairs.iter().enumerate() {
+            if i > 0 {
+                out.write_str(", ").unwrap();
+            }
+            write!(&mut out, "{}:{}", k, v).unwrap();
+        }
+        out.write_char('}').unwrap();
+
+        out
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct IndexExpression {
     pub token: Token,
@@ -332,6 +364,7 @@ impl Node for ExpressionStatement {
                     Expression::String(expr) => expr.as_string(),
                     Expression::Array(expr) => expr.as_string(),
                     Expression::Index(expr) => expr.as_string(),
+                    Expression::Hash(expr) => expr.as_string(),
                 }
             }
         } else {

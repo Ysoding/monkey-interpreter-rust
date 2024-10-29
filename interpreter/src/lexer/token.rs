@@ -33,6 +33,7 @@ pub enum TokenType {
     String,
     LBracket,
     RBracket,
+    COLON,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, PartialOrd, Ord)]
