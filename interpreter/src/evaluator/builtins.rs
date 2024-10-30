@@ -19,6 +19,7 @@ impl BuiltinFunctions {
             add_builtin("last", 1, blast),
             add_builtin("rest", 1, brest),
             add_builtin("push", 2, bpush),
+            add_builtin("puts", 1, bputs),
         ]
     }
 }
@@ -26,6 +27,20 @@ impl BuiltinFunctions {
 fn add_builtin(name: &str, param_num: usize, func: BuiltinFunction) -> (String, Object) {
     let name = name.to_owned();
     (name.clone(), Object::Builtin(name, param_num, func))
+}
+
+fn bputs(params: Vec<Object>) -> Object {
+    match params.first() {
+        Some(Object::String(s)) => {
+            println!("{}", s);
+            Object::Null
+        }
+        Some(o) => {
+            println!("{}", o);
+            Object::Null
+        }
+        _ => Object::Error("argument length wrong".to_string()),
+    }
 }
 
 fn blen(params: Vec<Object>) -> Object {
