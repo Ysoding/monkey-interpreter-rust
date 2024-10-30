@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc};
 
 use crate::ast::{BlockStatement, Identifier};
 
@@ -15,6 +15,7 @@ pub enum Object {
     Function(Vec<Identifier>, BlockStatement, Rc<RefCell<Environment>>),
     Builtin(String, usize, BuiltinFunction),
     Array(Vec<Object>),
+    Hash(HashMap<Object, Object>),
     Null,
 }
 
@@ -54,6 +55,7 @@ impl Object {
             Object::String(_) => "String",
             Object::Builtin(_, _, _) => "Builtin",
             Object::Array(_) => "Array",
+            Object::Hash(_) => "Hash",
         }
     }
 }
@@ -87,6 +89,33 @@ impl fmt::Display for Object {
                 out.push(']');
                 write!(f, "{}", out)
             }
+            Object::Hash(ref v) => {
+                let mut out = String::new();
+
+                out.push('{');
+                for (i, (key, val)) in v.iter().enumerate() {
+                    out.push_str(format!("{}: {}", key, val).as_str());
+                    if i < v.len() - 1 {
+                        out.push_str(", ");
+                    }
+                }
+                out.push('}');
+
+                write!(f, "{}", out)
+            }
+        }
+    }
+}
+
+impl Eq for Object {}
+
+impl Hash for Object {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match *self {
+            Object::Integer(ref i) => i.hash(state),
+            Object::Boolean(ref b) => b.hash(state),
+            Object::String(ref s) => s.hash(state),
+            _ => "".hash(state),
         }
     }
 }

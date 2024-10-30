@@ -1,11 +1,11 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use environment::Environment;
 use object::{BuiltinFunction, Object};
 
 use crate::ast::{
-    ArrayLiteral, BlockStatement, CallExpression, Expression, FunctionLiteral, Identifier,
-    IfExpresion, IndexExpression, InfixExpresion, PrefixExpresion, Program, Statement,
+    ArrayLiteral, BlockStatement, CallExpression, Expression, FunctionLiteral, HashLiteral,
+    Identifier, IfExpresion, IndexExpression, InfixExpresion, PrefixExpresion, Program, Statement,
     StringLiteral,
 };
 
@@ -67,8 +67,8 @@ impl Evaluator {
             Expression::Call(v) => self.eval_call_expr(v),
             Expression::String(v) => self.eval_string_literal_expr(v),
             Expression::Array(v) => self.eval_array_literal_expr(v),
-            Expression::Index(v) => self.eval_array_index_expr(v),
-            Expression::Hash(v) => todo!(),
+            Expression::Index(v) => self.eval_index_expr(v),
+            Expression::Hash(v) => self.eval_hash_literal_expr(v),
         }
     }
 
@@ -92,7 +92,40 @@ impl Evaluator {
         self.eval_statements(bstmt.statements)
     }
 
-    fn eval_array_index_expr(&mut self, expr: IndexExpression) -> Object {
+    fn eval_hash_literal_expr(&mut self, expr: HashLiteral) -> Object {
+        let mut map = HashMap::new();
+        for (key, val) in expr.pairs.into_iter() {
+            let k = self.eval_expr(key);
+            if k.is_error() {
+                return k;
+            }
+
+            let hk = self.oth(k);
+            if hk.is_error() {
+                return hk;
+            }
+
+            let v = self.eval_expr(val);
+            if v.is_error() {
+                return v;
+            }
+
+            map.insert(hk, v);
+        }
+        Object::Hash(map)
+    }
+
+    fn oth(&mut self, obj: Object) -> Object {
+        match obj {
+            Object::Integer(i) => Object::Integer(i),
+            Object::Boolean(b) => Object::Boolean(b),
+            Object::String(s) => Object::String(s),
+            Object::Error(s) => Object::Error(s),
+            x => Object::Error(format!("unusable as hash key: {}", x)),
+        }
+    }
+
+    fn eval_index_expr(&mut self, expr: IndexExpression) -> Object {
         let left = self.eval_expr(*expr.left);
         let index = self.eval_expr(*expr.index);
         match left {
@@ -100,6 +133,13 @@ impl Evaluator {
                 Ok(idx) => arr.into_iter().nth(idx as usize).unwrap_or(Object::Null),
                 Err(err) => err,
             },
+            Object::Hash(mut hash) => {
+                let k = self.oth(index);
+                match k {
+                    Object::Error(_) => k,
+                    _ => hash.remove(&k).unwrap_or(Object::Null),
+                }
+            }
             o => Object::Error(format!("index operator not supported: {}", o)),
         }
     }
@@ -371,8 +411,63 @@ impl Default for Evaluator {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::{ast::Node, lexer::Lexer, parser::Parser};
+
+    #[test]
+    fn test_hash_index_expression() {
+        let test_cases = vec![
+            (r#"{"foo": 5}["foo"]"#, Object::Integer(5)),
+            (r#"{"foo": 5}["bar"]"#, Object::Null),
+            (r#"let key = "foo"; {"foo": 5}[key]"#, Object::Integer(5)),
+            (r#"{}["foo"]"#, Object::Null),
+            (r#"{5: 5}[5]"#, Object::Integer(5)),
+            (r#"{true: 5}[true]"#, Object::Integer(5)),
+            (r#"{false: 5}[false]"#, Object::Integer(5)),
+        ];
+
+        for (input, expected) in test_cases {
+            let evaluated = test_eval(input);
+            assert_eq!(evaluated, expected);
+        }
+    }
+
+    #[test]
+    fn test_hash_literals() {
+        let input = r#"
+let two = "two";
+{
+"one": 10 - 9,
+two: 1 + 1,
+"thr" + "ee": 6 / 2,
+4: 4,
+true: 5,
+false: 6
+}
+        "#;
+        let evaluated = test_eval(input);
+
+        let mut expected: HashMap<Object, i64> = HashMap::new();
+        expected.insert(Object::String("one".to_string()), 1);
+        expected.insert(Object::String("two".to_string()), 2);
+        expected.insert(Object::String("three".to_string()), 3);
+        expected.insert(Object::Integer(4), 4);
+        expected.insert(Object::Boolean(true), 5);
+        expected.insert(Object::Boolean(false), 6);
+
+        match evaluated {
+            Object::Hash(v) => {
+                assert_eq!(v.len(), expected.len());
+
+                for (key, val) in v.iter() {
+                    test_integer_object(val, *expected.get(key).unwrap());
+                }
+            }
+            _ => panic!("unexpected Object {}", evaluated.get_type_name()),
+        }
+    }
 
     #[test]
     fn test_array_index_expression() {
@@ -581,7 +676,10 @@ addTwo(2);
             ),
             ("foobar", "identifier not found: foobar"),
             (r#""Hello" - "World""#, "unknown operator: String - String"),
-            //     ("1.5 + \"World\"", "unknown operator: Float + String"),
+            (
+                r#"{"name": "Monkey"}[fn(x) { x }];"#,
+                "unusable as hash key: [function]",
+            ),
         ];
 
         for (input, expected) in test_cases {
