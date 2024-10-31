@@ -5,8 +5,8 @@ use object::{BuiltinFunction, Object};
 
 use crate::ast::{
     ArrayLiteral, BlockStatement, CallExpression, Expression, FunctionLiteral, HashLiteral,
-    Identifier, IfExpresion, IndexExpression, InfixExpresion, PrefixExpresion, Program, Statement,
-    StringLiteral,
+    Identifier, IfExpresion, IndexExpression, InfixExpresion, Node, PrefixExpresion, Program,
+    Statement, StringLiteral,
 };
 
 mod builtins;
@@ -158,7 +158,15 @@ impl Evaluator {
         Object::String(expr.value)
     }
 
+    fn quote(&mut self, expr: Expression) -> Object {
+        Object::Quote(expr)
+    }
+
     fn eval_call_expr(&mut self, call_expr: CallExpression) -> Object {
+        if call_expr.function.token_literal() == "quote" {
+            return self.quote(call_expr.arguments[0].clone());
+        }
+
         let fun = self.eval_expr(*call_expr.function);
         match fun {
             Object::Function(params, body, f_env) => {
@@ -415,6 +423,26 @@ mod tests {
 
     use super::*;
     use crate::{ast::Node, lexer::Lexer, parser::Parser};
+
+    #[test]
+    fn test_quote() {
+        let test_cases = vec![
+            ("quote(5)", "5".to_string()),
+            ("quote(5 + 8)", "(5 + 8)".to_string()),
+            ("quote(foobar)", "foobar".to_string()),
+            ("quote(foobar + barfoo)", "(foobar + barfoo)".to_string()),
+        ];
+
+        for (input, expected) in test_cases {
+            let evaluated = test_eval(input);
+            match evaluated {
+                Object::Quote(obj) => {
+                    assert_eq!(obj.as_string(), expected);
+                }
+                _ => panic!("unexpected object"),
+            }
+        }
+    }
 
     #[test]
     fn test_hash_index_expression() {

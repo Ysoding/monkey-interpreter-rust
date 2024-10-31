@@ -1,7 +1,7 @@
 use core::fmt;
 use std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc};
 
-use crate::ast::{BlockStatement, Identifier};
+use crate::ast::{BlockStatement, Expression, Identifier, Node};
 
 use super::environment::Environment;
 
@@ -16,6 +16,7 @@ pub enum Object {
     Builtin(String, usize, BuiltinFunction),
     Array(Vec<Object>),
     Hash(HashMap<Object, Object>),
+    Quote(Expression),
     Null,
 }
 
@@ -56,6 +57,7 @@ impl Object {
             Object::Builtin(_, _, _) => "Builtin",
             Object::Array(_) => "Array",
             Object::Hash(_) => "Hash",
+            Object::Quote(_) => "Quote",
         }
     }
 }
@@ -102,6 +104,9 @@ impl fmt::Display for Object {
                 out.push('}');
 
                 write!(f, "{}", out)
+            }
+            Object::Quote(ref object) => {
+                write!(f, "QUOTE({})", object.as_string())
             }
         }
     }
