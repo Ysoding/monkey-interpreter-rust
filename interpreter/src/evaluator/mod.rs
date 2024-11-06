@@ -4,9 +4,9 @@ use environment::Environment;
 use object::{BuiltinFunction, Object};
 
 use crate::ast::{
-    ArrayLiteral, BlockStatement, CallExpression, Expression, FunctionLiteral, HashLiteral,
-    Identifier, IfExpresion, IndexExpression, InfixExpresion, Node, PrefixExpresion, Program,
-    Statement, StringLiteral,
+    ArrayLiteral, BlockStatement, CallExpression, Expression, ExpressionStatement, FunctionLiteral,
+    HashLiteral, Identifier, IfExpresion, IndexExpression, InfixExpresion, Node, PrefixExpresion,
+    Program, Statement, StringLiteral,
 };
 
 mod builtins;
@@ -417,12 +417,133 @@ impl Default for Evaluator {
     }
 }
 
+type ModifierFunc = fn(Box<dyn Node>) -> Box<dyn Node>;
+
+fn modify(node: Box<dyn Node>, modifier: ModifierFunc) -> Box<dyn Node> {
+    // if let Some(mut program) = node.as_any().downcast_ref::<Program>() {
+    //     for statement in &mut program.statements {
+    //         *statement = modify(Box::new(statement.clone()), modifier)
+    //             .as_any()
+    //             .downcast_ref::<Statement>()
+    //             .unwrap()
+    //             .clone();
+    //     }
+    //     return modifier(Box::new(*program));
+    // }
+
+    // if let Some(mut expr_stmt) = node.as_any().downcast_ref::<ExpressionStatement>().cloned() {
+    //     expr_stmt.expression = Some(
+    //         modify(expr_stmt.expression.unwrap(), modifier)
+    //             .as_any()
+    //             .downcast_ref::<Expression>()
+    //             .unwrap()
+    //             .clone(),
+    //     );
+    //     return modifier(Box::new(expr_stmt));
+    // }
+
+    modifier(node)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
     use super::*;
-    use crate::{ast::Node, lexer::Lexer, parser::Parser};
+    use crate::{
+        ast::{ExpressionStatement, IntegerLiteral, Node},
+        lexer::{
+            token::{Token, TokenType},
+            Lexer,
+        },
+        parser::Parser,
+    };
+
+    #[test]
+    fn test_modify() {
+        let one = || -> Expression {
+            Expression::Integer(IntegerLiteral {
+                token: Token {
+                    typ: TokenType::Int,
+                    literal: "1".to_string(),
+                },
+                value: 1,
+            })
+        };
+        let two = || -> Expression {
+            Expression::Integer(IntegerLiteral {
+                token: Token {
+                    typ: TokenType::Int,
+                    literal: "2".to_string(),
+                },
+                value: 2,
+            })
+        };
+
+        let tests: Vec<(Box<dyn Node>, Box<dyn Node>)> = vec![
+            (Box::new(one()), Box::new(two())),
+            (
+                Box::new(Program {
+                    statements: vec![Statement::Expression(ExpressionStatement {
+                        token: Token {
+                            typ: TokenType::Int,
+                            literal: "1".to_string(),
+                        },
+                        expression: Some(one()),
+                    })],
+                }),
+                Box::new(Program {
+                    statements: vec![Statement::Expression(ExpressionStatement {
+                        token: Token {
+                            typ: TokenType::Int,
+                            literal: "2".to_string(),
+                        },
+                        expression: Some(two()),
+                    })],
+                }),
+            ),
+        ];
+
+        let turn_one_into_two = |node: Box<dyn Node>| -> Box<dyn Node> {
+            if let Some(integer) = node.as_any().downcast_ref::<IntegerLiteral>() {
+                if integer.value == 1 {
+                    return Box::new(IntegerLiteral {
+                        value: 2,
+                        token: Token {
+                            typ: TokenType::Int,
+                            literal: "2".to_string(),
+                        },
+                    });
+                }
+            }
+            node
+        };
+
+        for (input, expected) in tests {
+            let modified = modify(input, turn_one_into_two);
+            // assert_eq!(modified, expected);
+        }
+    }
+
+    #[test]
+    fn test_quote_unquote() {
+        let test_cases = vec![
+            ("quote(unquote(4))", "4".to_string()),
+            ("quote(unquote(4 + 4))", "8".to_string()),
+            ("quote(8 + unquote(4 + 4))", "(8 + 8)".to_string()),
+            ("quote(unquote(4 + 4) + 8)", "(8 + 8)".to_string()),
+        ];
+
+        for (input, expected) in test_cases {
+            let evaluated = test_eval(input);
+            match evaluated {
+                Object::Quote(obj) => {
+                    assert_eq!(obj.as_string(), expected);
+                }
+                _ => panic!("unexpected object"),
+            }
+        }
+    }
 
     #[test]
     fn test_quote() {

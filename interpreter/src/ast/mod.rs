@@ -1,10 +1,14 @@
-use std::fmt::{self, Write};
+use std::{
+    any::Any,
+    fmt::{self, Write},
+};
 
 use crate::lexer::token::Token;
 
-pub trait Node {
+pub trait Node: Any {
     fn token_literal(&self) -> &str;
     fn as_string(&self) -> String;
+    fn as_any(&self) -> &dyn Any;
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -53,6 +57,10 @@ impl Node for Statement {
             Statement::Expression(stmt) => stmt.as_string(),
             Statement::Block(stmt) => stmt.as_string(),
         }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -125,6 +133,10 @@ impl Node for Expression {
             Expression::Hash(expr) => expr.as_string(),
         }
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 pub struct Program {
@@ -146,6 +158,10 @@ impl Node for Program {
             write!(&mut out, "{}", st.as_string()).unwrap();
         }
         out
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -174,6 +190,10 @@ impl Node for HashLiteral {
 
         out
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -198,6 +218,10 @@ impl Node for IndexExpression {
         out.write_char(')').unwrap();
 
         out
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -225,6 +249,10 @@ impl Node for ArrayLiteral {
         out.write_char(']').unwrap();
         out
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -240,6 +268,10 @@ impl Node for StringLiteral {
 
     fn as_string(&self) -> String {
         self.value.clone()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -260,6 +292,10 @@ impl Node for BlockStatement {
             write!(&mut out, "{}", st.as_string()).unwrap();
         }
         out
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -294,6 +330,10 @@ impl Node for LetStatement {
 
         out
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -309,6 +349,10 @@ impl Node for Identifier {
 
     fn as_string(&self) -> String {
         self.name.clone()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -334,6 +378,10 @@ impl Node for ReturnStatement {
 
         write!(&mut out, ";").unwrap();
         out
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -371,6 +419,10 @@ impl Node for ExpressionStatement {
             "".to_string()
         }
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -386,6 +438,10 @@ impl Node for IntegerLiteral {
 
     fn as_string(&self) -> String {
         self.token.literal.clone()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -411,6 +467,10 @@ impl Node for PrefixExpresion {
         }
 
         out
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -444,6 +504,10 @@ impl Node for InfixExpresion {
 
         out
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -459,6 +523,10 @@ impl Node for BooleanExpression {
 
     fn as_string(&self) -> String {
         self.token.literal.clone()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -492,6 +560,10 @@ impl Node for IfExpresion {
 
         out
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -522,6 +594,10 @@ impl Node for FunctionLiteral {
 
         out
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -544,6 +620,10 @@ impl Node for CallExpression {
         write!(&mut out, "{}({})", self.function.as_string(), ps.join(", "),).unwrap();
 
         out
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
